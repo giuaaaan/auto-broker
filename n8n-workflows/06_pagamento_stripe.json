@@ -1,0 +1,41 @@
+{
+  "name": "06 - Stripe Payment",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook/docusign-signed"
+      },
+      "name": "DocuSign Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "if ($json.body.status === 'completed') { return [$json]; } return [];"
+      },
+      "name": "Signed?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://api:8000/stripe-webhook",
+        "body": "={{ JSON.stringify($json.body) }}"
+      },
+      "name": "Process Payment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [650, 300]
+    }
+  ],
+  "connections": {
+    "DocuSign Webhook": {"main": [[{"node": "Signed?", "type": "main", "index": 0}]]},
+    "Signed?": {"main": [[{"node": "Process Payment", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1"},
+  "tags": ["payment", "stripe"]
+}

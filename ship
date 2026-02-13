@@ -1,0 +1,4 @@
+#!/bin/sh
+# Golden Path Deployment - One command to ship
+# Big Tech Platform Engineering 2026
+exec "$(dirname "$0")/.bigtech/golden-path.sh" "$@"

@@ -1,0 +1,177 @@
+{
+  "info": {
+    "_postman_id": "auto-broker-api",
+    "name": "AUTO-BROKER API",
+    "description": "Autonomous Logistics Broker API Collection",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:8000/health",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8000",
+          "path": ["health"]
+        }
+      }
+    },
+    {
+      "name": "Create Lead",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nome\": \"Mario\",\n  \"cognome\": \"Rossi\",\n  \"azienda\": \"Rossi Srl\",\n  \"telefono\": \"+39 333 1234567\",\n  \"email\": \"mario.rossi@example.it\",\n  \"settore\": \"E-commerce\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8000/leads",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8000",
+          "path": ["leads"]
+        }
+      }
+    },
+    {
+      "name": "Get Leads",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:8000/leads?status=nuovo",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8000",
+          "path": ["leads"],
+          "query": [{"key": "status", "value": "nuovo"}]
+        }
+      }
+    },
+    {
+      "name": "Call SARA",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:8000/leads/{{lead_id}}/call/sara",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8000",
+          "path": ["leads", "{{lead_id}}", "call", "sara"]
+        }
+      }
+    },
+    {
+      "name": "Qualify Lead (MARCO)",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"lead_id\": \"{{lead_id}}\",\n  \"volume_kg_mensile\": 500.0,\n  \"lane_origine\": \"Milano, Italia\",\n  \"lane_destinazione\": \"Roma, Italia\",\n  \"frequenza\": \"settimanale\",\n  \"prezzo_attuale_kg\": 1.20,\n  \"tipo_merce\": \"Abbigliamento\",\n  \"partita_iva\": \"IT12345678901\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8000/qualify-lead",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8000",
+          "path": ["qualify-lead"]
+        }
+      }
+    },
+    {
+      "name": "Source Carriers (CARLO)",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"lane_origine\": \"Milano, Italia\",\n  \"lane_destinazione\": \"Roma, Italia\",\n  \"peso_kg\": 500.0\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8000/source-carriers",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8000",
+          "path": ["source-carriers"]
+        }
+      }
+    },
+    {
+      "name": "Calculate Price",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"lane_origine\": \"Milano, Italia\",\n  \"lane_destinazione\": \"Roma, Italia\",\n  \"peso_kg\": 500.0\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8000/calculate-price",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8000",
+          "path": ["calculate-price"]
+        }
+      }
+    },
+    {
+      "name": "Create Proposal (LAURA)",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"qualifica_id\": \"{{qualifica_id}}\",\n  \"corriere_id\": \"{{corriere_id}}\",\n  \"markup_percentuale\": 30.0\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8000/create-proposal",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8000",
+          "path": ["create-proposal"]
+        }
+      }
+    },
+    {
+      "name": "Get Shipment Status",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:8000/shipment-status/{{tracking_id}}",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8000",
+          "path": ["shipment-status", "{{tracking_id}}"]
+        }
+      }
+    },
+    {
+      "name": "Dashboard Stats",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:8000/stats/dashboard",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8000",
+          "path": ["stats", "dashboard"]
+        }
+      }
+    }
+  ],
+  "variable": [
+    {"key": "lead_id", "value": ""},
+    {"key": "qualifica_id", "value": ""},
+    {"key": "corriere_id", "value": ""},
+    {"key": "tracking_id", "value": ""}
+  ]
+}

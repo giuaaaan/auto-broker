@@ -1,0 +1,41 @@
+{
+  "name": "07 - ANNA Tracking",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {"interval": [{"field": "hours", "hoursInterval": 6}]}
+      },
+      "name": "Every 6h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://api:8000/stats/dashboard"
+      },
+      "name": "Check Shipments",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://api:8000/disruption-alert",
+        "body": "={{ JSON.stringify({spedizione_id: $json.id, tipo_ritardo: 'ritardo', ore_ritardo: 3}) }}"
+      },
+      "name": "Send Delay Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [650, 300]
+    }
+  ],
+  "connections": {
+    "Every 6h": {"main": [[{"node": "Check Shipments", "type": "main", "index": 0}]]},
+    "Check Shipments": {"main": [[{"node": "Send Delay Alert", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1"},
+  "tags": ["tracking", "anna"]
+}

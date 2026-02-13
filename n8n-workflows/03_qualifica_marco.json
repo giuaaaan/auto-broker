@@ -1,0 +1,49 @@
+{
+  "name": "03 - MARCO Qualification",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook/sara-completed"
+      },
+      "name": "SARA Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "if ($json.body.outcome === 'interessato') { return [$json]; } return [];"
+      },
+      "name": "Interested?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {"amount": 5, "unit": "minutes"},
+      "name": "Wait 5min",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [650, 300],
+      "webhookId": "wait-marco"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://api:8000/leads/{{ $json.body.lead_id }}/call/marco"
+      },
+      "name": "Call MARCO",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [850, 300]
+    }
+  ],
+  "connections": {
+    "SARA Webhook": {"main": [[{"node": "Interested?", "type": "main", "index": 0}]]},
+    "Interested?": {"main": [[{"node": "Wait 5min", "type": "main", "index": 0}]]},
+    "Wait 5min": {"main": [[{"node": "Call MARCO", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1"},
+  "tags": ["qualification", "marco"]
+}

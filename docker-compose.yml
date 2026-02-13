@@ -1,0 +1,117 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: auto-broker-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-broker_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-broker_pass_2024}
+      POSTGRES_DB: ${POSTGRES_DB:-broker_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-broker_user} -d ${POSTGRES_DB:-broker_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - auto-broker-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: auto-broker-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - auto-broker-network
+
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: auto-broker-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-postgresql://broker_user:broker_pass_2024@postgres:5432/broker_db}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - RETELL_API_KEY=${RETELL_API_KEY}
+      - RETELL_AGENT_ID_SARA=${RETELL_AGENT_ID_SARA}
+      - RETELL_AGENT_ID_MARCO=${RETELL_AGENT_ID_MARCO}
+      - RETELL_AGENT_ID_LUIGI=${RETELL_AGENT_ID_LUIGI}
+      - DHL_API_KEY=${DHL_API_KEY}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+      - STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY}
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - DOCUSIGN_INTEGRATION_KEY=${DOCUSIGN_INTEGRATION_KEY}
+      - DOCUSIGN_ACCOUNT_ID=${DOCUSIGN_ACCOUNT_ID}
+      - DOCUSIGN_USER_ID=${DOCUSIGN_USER_ID}
+      - DOCUSIGN_BASE_URL=${DOCUSIGN_BASE_URL:-https://demo.docusign.net/restapi}
+      - WISE_API_KEY=${WISE_API_KEY}
+      - AFTERSHIP_API_KEY=${AFTERSHIP_API_KEY}
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+    volumes:
+      - ./api:/app
+      - /app/__pycache__
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - auto-broker-network
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: auto-broker-n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_USER:-admin}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD:-admin123}
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - NODE_ENV=production
+      - WEBHOOK_URL=${WEBHOOK_URL:-http://localhost:5678/}
+      - GENERIC_TIMEZONE=${GENERIC_TIMEZONE:-Europe/Rome}
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=${POSTGRES_DB:-broker_db}
+      - DB_POSTGRESDB_USER=${POSTGRES_USER:-broker_user}
+      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD:-broker_pass_2024}
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n-workflows:/home/node/n8n-workflows:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - auto-broker-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  n8n_data:
+
+networks:
+  auto-broker-network:
+    driver: bridge

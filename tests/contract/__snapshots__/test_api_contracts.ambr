@@ -1,0 +1,17 @@
+# serializer version: 1
+# name: TestLeadSchemaContracts.test_lead_create_contract
+  dict({
+    'azienda': 'Test Srl',
+    'cap': None,
+    'citta': None,
+    'cognome': 'User',
+    'email': 'test@example.com',
+    'fonte': 'csv',
+    'indirizzo': None,
+    'nome': 'Test',
+    'note': None,
+    'provincia': None,
+    'settore': None,
+    'telefono': '+39123456789',
+  })
+# ---

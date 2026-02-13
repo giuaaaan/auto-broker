@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Deploy shortcut - Big Tech Platform Engineering 2026
+# Usage: ./deploy
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec "$SCRIPT_DIR/scripts/auto-deploy.sh" "$@"

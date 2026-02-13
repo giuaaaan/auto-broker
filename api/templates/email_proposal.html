@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; }
+        .header { background: #0066cc; color: white; padding: 20px; text-align: center; }
+        .content { padding: 20px; }
+        .price-box { background: #f0f8ff; border: 2px solid #0066cc; padding: 20px; text-align: center; margin: 20px 0; }
+        .price { font-size: 32px; color: #0066cc; font-weight: bold; }
+        .cta { background: #28a745; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 20px 0; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        td { padding: 10px; border-bottom: 1px solid #ddd; }
+        td:first-child { font-weight: bold; background: #f5f5f5; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>{{ company_name }}</h1>
+        <p>Soluzioni di Trasporto e Logistica</p>
+    </div>
+    <div class="content">
+        <h2>Gentile {{ nome_cliente }},</h2>
+        <p>Grazie per averci contattato per <strong>{{ azienda }}</strong>.</p>
+        <p>Ecco la nostra proposta personalizzata:</p>
+        
+        <table>
+            <tr><td>Corriere</td><td>{{ corriere_nome }}</td></tr>
+            <tr><td>Tratta</td><td>{{ lane_origine }} → {{ lane_destinazione }}</td></tr>
+            <tr><td>Prezzo al kg</td><td>€ {{ "%.2f"|format(prezzo_kg) }}</td></tr>
+            <tr><td>Tempi di consegna</td><td>{{ tempi_consegna }} giorni</td></tr>
+        </table>
+        
+        <div class="price-box">
+            <div class="price">€ {{ "%.2f"|format(prezzo_totale) }}</div>
+            <p>Totale stimato mensile (IVA esclusa)</p>
+        </div>
+        
+        {% if docusign_url %}
+        <center><a href="{{ docusign_url }}" class="cta">FIRMA LA PROPOSTA</a></center>
+        {% endif %}
+        
+        <p>La proposta è valida per 30 giorni.</p>
+        <p>Cordiali saluti,<br><strong>Il Team {{ company_name }}</strong></p>
+    </div>
+</body>
+</html>

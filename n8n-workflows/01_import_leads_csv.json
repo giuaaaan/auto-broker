@@ -1,0 +1,56 @@
+{
+  "name": "01 - Import Leads CSV",
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "filePath": "=/data/leads.csv"
+      },
+      "name": "Read CSV",
+      "type": "n8n-nodes-base.readBinaryFiles",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {"options": {}},
+      "name": "CSV to JSON",
+      "type": "n8n-nodes-base.spreadsheetFile",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "return items[0].json.map(lead => ({ json: lead }));"
+      },
+      "name": "Split Leads",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://api:8000/leads",
+        "body": "={{ JSON.stringify($json) }}"
+      },
+      "name": "Create Leads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1050, 300]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {"main": [[{"node": "Read CSV", "type": "main", "index": 0}]]},
+    "Read CSV": {"main": [[{"node": "CSV to JSON", "type": "main", "index": 0}]]},
+    "CSV to JSON": {"main": [[{"node": "Split Leads", "type": "main", "index": 0}]]},
+    "Split Leads": {"main": [[{"node": "Create Leads", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1"},
+  "tags": ["leads", "import"]
+}

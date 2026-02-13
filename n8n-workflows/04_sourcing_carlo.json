@@ -1,0 +1,53 @@
+{
+  "name": "04 - CARLO Sourcing",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook/qualification-complete"
+      },
+      "name": "Qualification Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $json.body; if (d.status === 'approvato' && d.credit_score > 70) { return [$json]; } return [];"
+      },
+      "name": "Approved?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://api:8000/source-carriers",
+        "body": "={{ JSON.stringify({lane_origine: $json.body.lane_origine, lane_destinazione: $json.body.lane_destinazione, peso_kg: $json.body.volume_kg_mensile}) }}"
+      },
+      "name": "Source Carriers",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://api:8000/create-proposal",
+        "body": "={{ JSON.stringify({qualifica_id: $json.body.id, corriere_id: $json.miglior_prezzo.corriere_id}) }}"
+      },
+      "name": "Create Proposal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [850, 300]
+    }
+  ],
+  "connections": {
+    "Qualification Webhook": {"main": [[{"node": "Approved?", "type": "main", "index": 0}]]},
+    "Approved?": {"main": [[{"node": "Source Carriers", "type": "main", "index": 0}]]},
+    "Source Carriers": {"main": [[{"node": "Create Proposal", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1"},
+  "tags": ["sourcing", "carlo"]
+}

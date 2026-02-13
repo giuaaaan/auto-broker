@@ -1,0 +1,39 @@
+{
+  "name": "05 - LUIGI Closing",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook/proposal-viewed"
+      },
+      "name": "Proposal Viewed",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {"amount": 4, "unit": "hours"},
+      "name": "Wait 4h",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "webhookId": "wait-luigi"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://api:8000/leads/{{ $json.body.lead_id }}/call/luigi"
+      },
+      "name": "Call LUIGI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [650, 300]
+    }
+  ],
+  "connections": {
+    "Proposal Viewed": {"main": [[{"node": "Wait 4h", "type": "main", "index": 0}]]},
+    "Wait 4h": {"main": [[{"node": "Call LUIGI", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1"},
+  "tags": ["closing", "luigi"]
+}
