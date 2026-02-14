@@ -1,0 +1,19 @@
+# Auto-Broker Agent Tools - Requirements
+# Big Tech Style Browser Automation
+
+# Browser Automation
+playwright>=1.40.0
+
+# MCP Server
+aiohttp>=3.9.0
+
+# Async support
+asyncio-mqtt>=0.16.0
+
+# Optional: for advanced vision capabilities
+# pillow>=10.0.0
+# opencv-python>=4.8.0
+
+# Development
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
