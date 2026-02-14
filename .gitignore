@@ -86,3 +86,14 @@ yarn-error.log*
 
 # Build outputs
 *.tsbuildinfo
+
+# Personal/Private files (not for public repo)
+screenshots/
+*.png
+*.jpg
+*.jpeg
+safari_*.py
+personal_*.py
+private_*
+.env.local
+.env.personal
