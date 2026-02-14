@@ -503,20 +503,43 @@ docker-compose up -d
 
 Deploy enterprise-grade Auto-Broker on **Oracle Cloud Free Tier** (4GB RAM / 1 CPU ARM Ampere A1) with zero cost.
 
-### Quick Deploy (One Command)
+### 🎮 DEMO_MODE - Test Gratis (€0)
+
+Prova Auto-Broker **senza spendere 1 euro** - nessuna API key necessaria!
 
 ```bash
-# 1. Clone and configure
+# 1. Clone
 git clone https://github.com/giuaaaan/auto-broker.git
 cd auto-broker
+
+# 2. Attiva DEMO_MODE (già impostato di default)
+echo "DEMO_MODE=true" > .env.oracle
+
+# 3. Deploy
+./scripts/deploy-oracle-enterprise.sh
+
+# 4. Apri nel browser
+echo "http://$(curl -s ifconfig.me)"
+```
+
+**Cosa funziona in DEMO_MODE:**
+- ✅ Dashboard NASA al 100% (mappe, grafici, WebSocket)
+- ✅ Revenue che sale automaticamente (+€50-300 ogni 30s)
+- ✅ Agenti AI simulati (SARA, PAOLO, GIULIA in azione)
+- ✅ Camion che si muovono sulla mappa
+- ✅ Zero costi API (Hume, Insighto, Blockchain mockate)
+
+📖 **[DEMO_MODE Guide](DEMO_MODE_GUIDE.md)** - Istruzioni complete per test gratuito
+
+### Production Deploy (con API reali)
+
+```bash
+# 1. Configura con API keys reali
 cp .env.oracle.example .env.oracle
-# Edit .env.oracle with your API keys
+# Edit: DEMO_MODE=false + aggiungi HUME_API_KEY, INSIGHTO_API_KEY
 
 # 2. Deploy
 ./scripts/deploy-oracle-enterprise.sh
-
-# 3. Access
-echo "http://$(curl -s ifconfig.me)"
 ```
 
 ### Resource Allocation (Zero-Waste Architecture)
@@ -541,6 +564,7 @@ echo "http://$(curl -s ifconfig.me)"
 - ✅ **Health checks** on all services
 - ✅ **Non-root containers** for security
 - ✅ **One-command deploy** script
+- ✅ **DEMO_MODE** - Zero cost testing
 
 ---
 
