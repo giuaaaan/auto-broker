@@ -395,31 +395,50 @@ GET    /health                   # Health check
 
 ```
 auto-broker/
-├── docker-compose.yml          # All services configuration
-├── .env.example               # Environment template
-├── init.sql                   # Database schema + seed data
-├── setup.sh                   # Setup script
-├── Makefile                   # Useful commands
-├── pytest.ini                # Test configuration
-├── .coveragerc               # Coverage settings
+├── docker-compose.yml               # All services configuration
+├── docker-compose.oracle.enterprise.yml  # Oracle Cloud optimized
+├── .env.example                     # Environment template
+├── .env.oracle.example              # Oracle Cloud environment
+├── ORACLE_ENTERPRISE_DEPLOY.md      # Oracle deploy guide
+├── init.sql                         # Database schema + seed data
+├── setup.sh                         # Setup script
+├── Makefile                         # Useful commands
+├── pytest.ini                       # Test configuration
+├── .coveragerc                      # Coverage settings
 │
-├── api/                       # FastAPI Application
+├── config/                          # Configuration files
+│   └── postgresql.oracle.conf       # Tuned for 4GB RAM
+│
+├── dashboard/                       # React Dashboard
+│   ├── Dockerfile.optimized         # Multi-stage build
+│   └── nginx/                       # Nginx configs
+│
+├── nginx/                           # Reverse proxy configs
+│   ├── oracle-nginx.conf            # Main proxy config
+│   └── nginx.conf                   # Base nginx config
+│
+├── scripts/                         # Automation scripts
+│   ├── deploy-oracle-enterprise.sh  # One-command deploy
+│   └── backup-oracle.sh             # Backup automation
+│
+├── api/                             # FastAPI Application
 │   ├── Dockerfile
+│   ├── Dockerfile.optimized         # Multi-stage for Oracle
 │   ├── requirements.txt
-│   ├── main.py               # All endpoints with rate limiting
-│   ├── models.py             # SQLAlchemy models
-│   ├── schemas.py            # Pydantic schemas
+│   ├── main.py                      # All endpoints
+│   ├── models.py                    # SQLAlchemy models
+│   ├── schemas.py                   # Pydantic schemas
 │   ├── templates/
 │   │   └── email_proposal.html
 │   └── services/
-│       ├── database.py       # DB connection & session management
-│       ├── redis_service.py  # Redis caching
-│       ├── retell_service.py # Voice AI integration
-│       ├── stripe_service.py # Payment processing
-│       ├── docusign_service.py # E-signatures
-│       ├── email_service.py  # Email sending
-│       ├── pdf_generator.py  # PDF generation
-│       └── scraper.py        # Web scraping
+│       ├── database.py              # DB connection
+│       ├── redis_service.py         # Redis caching
+│       ├── retell_service.py        # Voice AI
+│       ├── stripe_service.py        # Payments
+│       ├── docusign_service.py      # E-signatures
+│       ├── email_service.py         # Email
+│       ├── pdf_generator.py         # PDF generation
+│       └── scraper.py               # Web scraping
 │
 ├── tests/                     # Test Suite
 │   ├── conftest.py           # Pytest fixtures
@@ -477,6 +496,51 @@ docker push yourusername/auto-broker-api:latest
 docker pull yourusername/auto-broker-api:latest
 docker-compose up -d
 ```
+
+---
+
+## 🚀 Oracle Cloud Free Tier Deployment (Enterprise)
+
+Deploy enterprise-grade Auto-Broker on **Oracle Cloud Free Tier** (4GB RAM / 1 CPU ARM Ampere A1) with zero cost.
+
+### Quick Deploy (One Command)
+
+```bash
+# 1. Clone and configure
+git clone https://github.com/giuaaaan/auto-broker.git
+cd auto-broker
+cp .env.oracle.example .env.oracle
+# Edit .env.oracle with your API keys
+
+# 2. Deploy
+./scripts/deploy-oracle-enterprise.sh
+
+# 3. Access
+echo "http://$(curl -s ifconfig.me)"
+```
+
+### Resource Allocation (Zero-Waste Architecture)
+
+| Service | RAM | Purpose |
+|---------|-----|---------|
+| nginx | 64MB | Reverse proxy + static assets |
+| PostgreSQL | 1.2GB | Tuned for ARM + SSD |
+| Redis | 256MB | Cache & sessions |
+| FastAPI | 768MB | 2 uvicorn workers |
+| **Total Used** | ~2.3GB | Leaves 1.7GB buffer |
+
+### Documentation
+
+📖 **[Complete Oracle Deploy Guide](ORACLE_ENTERPRISE_DEPLOY.md)** - Step-by-step instructions, troubleshooting, scaling path to Hetzner
+
+### Key Features
+
+- ✅ **Multi-stage Docker builds** (Alpine Linux)
+- ✅ **PostgreSQL tuned** for 4GB systems
+- ✅ **Automated backup** to Oracle Object Storage
+- ✅ **Health checks** on all services
+- ✅ **Non-root containers** for security
+- ✅ **One-command deploy** script
 
 ---
 
