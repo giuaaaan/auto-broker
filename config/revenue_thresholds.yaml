@@ -1,0 +1,438 @@
+# AUTO-BROKER: Revenue Activation Matrix
+# Sistema di sblocco progressivo automatico basato su fatturato mensile
+
+# NOTA: Questo file definisce le soglie. L'attivazione effettiva
+# è gestita da RevenueMonitorService che legge anche da DB.
+
+# ============================================================================
+# LIVELLO 0: Sopravvivenza (€0 - €1.000 fatturato)
+# ============================================================================
+level_0_survival:
+  name: "Sopravvivenza"
+  revenue_range:
+    min: 0
+    max: 1000
+  activation_trigger: "default"
+  
+  active_components:
+    - docker_compose_single_node
+    - ollama_local_only
+    - postgresql_single
+    - sara_marco_basic
+    - redis_single
+    - basic_monitoring
+  
+  disabled_components:
+    - kubernetes
+    - hume_ai
+    - vault_hsm
+    - tee_confidential
+    - dat_iq
+    - franco
+    - paolo_blockchain
+    - semantic_cache_distributed
+    - chaos_engineering
+  
+  resource_limits:
+    max_cpu_cores: 2
+    max_memory_gb: 4
+    max_storage_gb: 100
+  
+  max_monthly_burn: 450
+  estimated_cost_breakdown:
+    compute: 200
+    database: 50
+    storage: 50
+    backup: 50
+    monitoring: 100
+
+# ============================================================================
+# LIVELLO 1: Bootstrap (€1.000 - €5.000 fatturato)
+# ============================================================================
+level_1_bootstrap:
+  name: "Bootstrap"
+  revenue_range:
+    min: 1000
+    max: 5000
+  activation_trigger: "monthly_revenue > 1000"
+  required_consecutive_months: 1
+  
+  auto_enable:
+    - hume_ai_prosody:
+        budget_minutes: 4000  # ~€600/mese
+        fallback_to_ollama: true
+    - insighto_voice:
+        concurrent_calls: 5
+    - hetzner_dual_server:
+        server_type: "cpx31"  # 4 vCPU, 8GB RAM
+        location: "nbg1"
+    - redis_cluster:
+        nodes: 3
+        replication: true
+    - semantic_cache_local:
+        model: "sentence-transformers/all-MiniLM-L6-v2"
+  
+  keep_disabled:
+    - kubernetes
+    - vault_hsm
+    - tee_confidential
+    - dat_iq
+    - paolo_blockchain
+  
+  resource_limits:
+    max_cpu_cores: 8
+    max_memory_gb: 16
+    max_storage_gb: 500
+  
+  max_monthly_burn: 800
+  estimated_cost_breakdown:
+    compute: 400
+    database: 100
+    hume_ai: 600
+    storage: 100
+    backup: 100
+    monitoring: 100
+    redis: 50
+
+# ============================================================================
+# LIVELLO 2: Growth (€5.000 - €20.000 fatturato)
+# ============================================================================
+level_2_growth:
+  name: "Growth"
+  revenue_range:
+    min: 5000
+    max: 20000
+  activation_trigger: "monthly_revenue > 5000 AND sustained_3_months"
+  required_consecutive_months: 3
+  pre_warming_days: 7
+  
+  auto_enable:
+    - eks_kubernetes_control_plane:
+        cluster_name: "auto-broker-growth"
+        region: "eu-west-1"
+        node_groups: 0  # Control plane only, worker scaling separato
+        cost_optimization: "fargate_spot"
+    - vault_oss_ha:
+        mode: "integrated_storage"
+        nodes: 3
+        backend: "raft"
+        hsm_enabled: false
+    - dat_iq_market_data:
+        tier: "standard"
+        api_calls_monthly: 10000
+    - franco_retention:
+        enabled: true
+        max_calls_per_day: 10
+    - giulia_ai_advanced:
+        computer_vision: true
+        ocr_enabled: true
+    - semantic_cache_distributed:
+        backend: "redis_cluster"
+        embedding_dims: 384
+        similarity_threshold: 0.95
+    - cost_dashboard_granular:
+        precision: 6
+        per_shipment_tracking: true
+    - postgresql_ha:
+        mode: "primary_replica"
+        replication_lag_max_ms: 1000
+  
+  gradual_rollout:
+    week_1: 10  # 10% traffico su K8s
+    week_2: 25
+    week_3: 50
+    week_4: 100
+  
+  resource_limits:
+    max_cpu_cores: 32
+    max_memory_gb: 64
+    max_storage_gb: 2000
+  
+  max_monthly_burn: 3000
+  estimated_cost_breakdown:
+    eks_control_plane: 75
+    eks_fargate: 800
+    rds_multi_az: 400
+    vault_ha: 200
+    dat_iq: 500
+    hume_ai: 800
+    storage: 200
+    backup: 100
+    monitoring: 200
+    franco: 50
+    semantic_cache: 100
+
+# ============================================================================
+# LIVELLO 3: Scale (€20.000 - €50.000 fatturato)
+# ============================================================================
+level_3_scale:
+  name: "Scale"
+  revenue_range:
+    min: 20000
+    max: 50000
+  activation_trigger: "monthly_revenue > 20000"
+  required_consecutive_months: 2
+  pre_warming_days: 14
+  
+  auto_enable:
+    - confidential_computing_tee:
+        technology: "amd_sev_snp"
+        runtime: "kata_containers"
+        nodes_min: 2
+        nodes_max: 10
+    - vault_hsm_enterprise:
+        hsm_provider: "aws_cloudhsm"
+        key_protection: "fips_140_2_level_3"
+        auto_unseal: true
+    - multi_region_deployment:
+        primary: "eu-west-1"
+        secondary: "us-east-1"
+        replication_strategy: "active_active"
+        data_residency: "gdpr_compliant"
+    - paolo_blockchain_full:
+        network: "polygon"
+        smart_contracts: ["carrier_escrow", "pod_verification"]
+        gas_optimization: "eip1559"
+    - giulia_governance_full:
+        human_on_the_loop: true
+        veto_window_seconds: 60
+        audit_blockchain: true
+    - chaos_engineering_active:
+        experiments:
+          - pod_failure
+          - network_latency
+          - database_failover
+        blast_radius: "controlled"
+        auto_rollback: true
+    - redis_cluster_pro:
+        nodes: 6
+        shards: 3
+        persistence: "aof_everysec"
+    - kafka_event_streaming:
+        partitions: 12
+        replication_factor: 3
+        retention_hours: 168
+  
+  resource_limits:
+    max_cpu_cores: 128
+    max_memory_gb: 256
+    max_storage_gb: 10000
+    max_regions: 2
+  
+  max_monthly_burn: 10000
+  estimated_cost_breakdown:
+    eks_nodes: 2000
+    tee_nodes: 800
+    rds_multi_az: 800
+    vault_hsm: 1000
+    dat_iq_enterprise: 1500
+    hume_ai: 2000
+    polygon_gas: 300
+    multi_region: 1500
+    storage: 800
+    backup: 500
+    monitoring: 500
+    chaos_platform: 200
+    kafka: 300
+
+# ============================================================================
+# LIVELLO 4: Enterprise (€50.000+ fatturato)
+# ============================================================================
+level_4_enterprise:
+  name: "Enterprise"
+  revenue_range:
+    min: 50000
+    max: null  # No upper limit
+  activation_trigger: "monthly_revenue > 50000"
+  required_consecutive_months: 2
+  pre_warming_days: 30
+  requires_ceo_approval: true
+  
+  auto_enable:
+    - dedicated_teams_5fte:
+        roles:
+          - senior_backend: 2
+          - devops_sre: 1
+          - ml_engineer: 1
+          - product_manager: 0.5
+          - designer_ux: 0.5
+        hiring_alert: true
+        payroll_integration: "automatic"
+    - zero_knowledge_pricing:
+        technology: "zk_snarks"
+        circuit: "markup_verification_30percent"
+        proof_generation: "client_side"
+    - nvidia_omniverse_twins:
+        digital_twins: true
+        simulation_fps: 60
+        physics_engine: "physx5"
+    - graph_database_neo4j:
+        nodes: "unlimited"
+        relationships: "supply_chain_full"
+        graph_algorithms: ["shortest_path", "community_detection"]
+    - full_security_audit:
+        soc2_type2: true
+        iso27001: true
+        pen_test_quarterly: true
+        bug_bounty: "hackerone"
+    - dedicated_support:
+        sla: "99.99%"
+        response_time_critical: "15_minutes"
+        account_manager: "dedicated"
+    - advanced_analytics:
+        data_warehouse: "snowflake"
+        ml_platform: "sagemaker"
+        predictive_models: ["churn", "ltv", "demand_forecasting"]
+  
+  resource_limits:
+    max_cpu_cores: 512
+    max_memory_gb: 1024
+    max_storage_gb: 100000
+    max_regions: 5
+  
+  max_monthly_burn: 35000
+  estimated_cost_breakdown:
+    compute: 8000
+    team: 25000
+    security: 2000
+    omniverse: 1500
+    snowflake: 2000
+    neo4j: 1000
+    support: 2000
+    misc: 1500
+
+# ============================================================================
+# SAFETY & EMERGENCY BRAKE
+# ============================================================================
+safety_settings:
+  emergency_brake:
+    # Se attivazione farebbe superare 90% fatturato in costi
+    max_cost_to_revenue_ratio: 0.90
+    # Blocca attivazione automatica se costo aggiuntivo > €500/mese
+    max_auto_activation_cost_eur: 500
+    # Richiede approvazione umana per attivazioni > €2000/mese
+    human_approval_threshold_eur: 2000
+  
+  downgrade_protection:
+    # Non fare mai downgrade automatico sotto Livello 1
+    min_auto_level: 1
+    # Se revenue crolla per 3 mesi consecutivi, richiede review
+    downgrade_after_months: 3
+    # Mantieni dati anche se disattivi risorse (storage sempre attivo)
+    data_retention_always_active: true
+  
+  rollback_policy:
+    # Mantieni vecchia infrastruttura attiva per 7 giorni dopo migrazione
+    blue_green_overlap_days: 7
+    # Snapshot prima di ogni major upgrade
+    snapshot_before_upgrade: true
+    # Rollback time massimo: 30 minuti
+    max_rollback_time_minutes: 30
+
+# ============================================================================
+# NOTIFICATIONS
+# ============================================================================
+notifications:
+  pre_notification:
+    enabled: true
+    days_before: 7
+    channels: [email, dashboard, slack]
+    template: "level_upgrade_preview"
+  
+  dry_run:
+    enabled: true
+    days_before: 1
+    simulate_provisioning: true
+    cost_check: true
+    quota_verification: true
+  
+  activation:
+    enabled: true
+    real_time: true
+    channels: [email, sms, slack, dashboard]
+    template: "level_activated"
+  
+  post_activation:
+    enabled: true
+    after_days: [1, 7, 30]
+    metrics: [cost, performance, stability]
+
+# ============================================================================
+# PRE-WARMING STRATEGY
+# ============================================================================
+pre_warming:
+  enabled: true
+  # Quando prevedi attivazione tra X giorni, inizia pre-warming
+  trigger_days_before: 15
+  
+  strategies:
+    kubernetes:
+      action: "create_cluster_control_plane"
+      cost: "minimal"  # ~$75/mese EKS control plane
+      ready_when: "cluster_active"
+    
+    tee_nodes:
+      action: "label_nodes_confidential"
+      cost: "zero"  # Solo etichette, nodi creati su attivazione
+      ready_when: "labels_applied"
+    
+    vault_ha:
+      action: "deploy_pods_replicas_0"
+      cost: "minimal"  # Storage PVC, no compute
+      ready_when: "pvc_bound"
+    
+    database_ha:
+      action: "create_replica_stopped"
+      cost: "storage_only"  # Replica ferma, paga solo storage
+      ready_when: "snapshot_ready"
+
+# ============================================================================
+# COST PROJECTION
+# ============================================================================
+cost_projection:
+  enabled: true
+  forecast_horizon_days: 90
+  
+  scenarios:
+    optimistic:
+      growth_rate_monthly: 0.20  # +20%/mese
+      probability: 0.25
+    
+    realistic:
+      growth_rate_monthly: 0.10  # +10%/mese
+      probability: 0.50
+    
+    pessimistic:
+      growth_rate_monthly: -0.05  # -5%/mese
+      probability: 0.25
+  
+  alerts:
+    # Allerta se proiezione mostra burn rate > 80% fatturato
+    burn_rate_warning_threshold: 0.80
+    # Allerta se runway < 6 mesi
+    runway_warning_months: 6
+
+# ============================================================================
+# ROLLOUT PHASES (Documentative)
+# ============================================================================
+# Il sistema parte in shadow_mode e passa attraverso le fasi
+# Ogni fase ha i suoi criteri di uscita
+
+rollout_phases:
+  shadow_mode:
+    description: "Logging only, nessuna attivazione automatica"
+    exit_criteria: "manual_review_complete"
+  
+  pilot_manual:
+    description: "Attivazione manuale con supervisone"
+    exit_criteria: "3_successful_activations"
+  
+  semi_auto:
+    description: "Pre-approval richiesto, poi auto-activation"
+    exit_criteria: "5_successful_activations_no_issues"
+  
+  full_auto:
+    description: "Attivazione completamente automatica"
+    exit_criteria: "stabile_per_6_mesi"
+
+current_rollout_phase: "shadow_mode"

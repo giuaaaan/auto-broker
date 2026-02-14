@@ -125,6 +125,28 @@ make setup
 - **Alert**: Se ritardo > 2h → Email cliente
 - **Post-consegna**: Richiesta recensione
 
+### PAOLO - Carrier Failover Agent 🤖
+- **Trigger**: Carrier on_time_rate < 90% (check ogni 5 min)
+- **Action**:
+  - Identifica shipment a rischio
+  - Trova carrier alternativo (< 2h disponibilità)
+  - Esegue failover atomico (DB + Blockchain)
+  - Trasferisce escrow a nuovo carrier
+- **Human-in-the-loop**: Importi > €10k richiedono approvazione
+- **Outcome**: Cliente notificato, nessun costo aggiuntivo
+
+### GIULIA - Dispute Resolution Agent 🤖
+- **Trigger**: PODSmartContract.openDispute() webhook
+- **Action**:
+  - Analizza POD con AI (OCR, pattern matching)
+  - Verifica tracking (GPS vs claim)
+  - Computer vision per danni
+- **Decisione**:
+  - Confidence > 85% → Auto-resolve
+  - Confidence 50-85% → Escalation umana
+  - Confidence < 50% → Richiede più evidence
+- **Outcome**: Scrive risoluzione su blockchain, aggiorna reputazione carrier
+
 ---
 
 ## 🧪 Testing
@@ -159,6 +181,51 @@ Il progetto richiede **100% code coverage**. La CI fallisce se coverage < 100%.
 pytest --cov=api --cov-report=html
 # View report: htmlcov/index.html
 ```
+
+---
+
+## 🔒 Security & Confidential Computing
+
+Auto-Broker implementa **Confidential Computing** per proteggere dati sensibili durante l'elaborazione.
+
+### Features di Sicurezza
+
+| Feature | Implementation | Status |
+|---------|---------------|--------|
+| **Memory Encryption** | AMD SEV-SNP / Intel TDX | ✅ Implemented |
+| **Remote Attestation** | Vault Integration | ✅ Implemented |
+| **Zero-Knowledge Pricing** | zk-SNARK Circuits | ✅ Implemented |
+| **Semantic Cache** | Sentence Transformers | ✅ Implemented |
+| **PII Masking** | SHA256 Hashing | ✅ Active |
+| **mTLS** | Istio Service Mesh | ✅ Active |
+| **Secret Management** | HashiCorp Vault | ✅ Active |
+
+### Confidential Enclaves
+
+Gli agenti AI (SARA, MARCO, FRANCO) possono girare in **Trusted Execution Environments (TEE)**:
+
+```yaml
+# Kubernetes deployment con confidential computing
+apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      runtimeClassName: kata-cc-amd-sev  # Enclave runtime
+      containers:
+      - name: sara-agent
+        resources:
+          limits:
+            amd.com/sev-snp: "1"  # Richiede SEV-SNP
+```
+
+**Garanzie di Sicurezza:**
+- 🔐 Dati in RAM cifrati (host non può leggere)
+- 🔑 Secrets solo dopo attestation verificata
+- 📝 Nessun log su disco (solo stdout)
+- ✅ Verificabilità da terze parti
+
+📖 [Confidential Computing Docs](docs/CONFIDENTIAL_COMPUTING.md)
 
 ---
 

@@ -1,0 +1,406 @@
+{
+  "name": "SARA_Emotional_Quota_Aware",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "retell-call-end",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": " webhook-receive",
+      "name": "Retell_Call_End",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "retell-call-end"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://api:8000/eq/quota/status",
+        "options": {}
+      },
+      "id": " quota-check",
+      "name": "Check_Quota_Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-1",
+              "leftValue": "={{ $json.hume_api.usage_percent }}",
+              "rightValue": "90",
+              "operator": {
+                "type": "number",
+                "operation": "lt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": " if-quota-ok",
+      "name": "Quota_OK",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://api:8000/eq/analyze-sentiment",
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "recording_url": "={{ $('Retell_Call_End').item.json.body.recording_url }}",
+          "lead_id": "={{ $('Retell_Call_End').item.json.body.lead_id }}",
+          "call_id": "={{ $('Retell_Call_End').item.json.body.call_id }}"
+        },
+        "options": {}
+      },
+      "id": " analyze-hume",
+      "name": "Analyze_With_Hume",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://api:8000/eq/analyze-sentiment",
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "recording_url": "={{ $('Retell_Call_End').item.json.body.recording_url }}",
+          "lead_id": "={{ $('Retell_Call_End').item.json.body.lead_id }}",
+          "call_id": "={{ $('Retell_Call_End').item.json.body.call_id }}",
+          "transcription": "={{ $('Retell_Call_End').item.json.body.transcript }}"
+        },
+        "options": {}
+      },
+      "id": " analyze-fallback",
+      "name": "Analyze_Fallback",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-1",
+              "leftValue": "={{ $json.requires_escalation }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": " if-escalation",
+      "name": "Requires_Escalation",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1050, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://api:8000/leads/{{ $json.lead_id }}/escalate",
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "reason": "={{ $json.dominant_emotion }} detected",
+          "source": "emotional_intelligence",
+          "priority": "high"
+        },
+        "options": {}
+      },
+      "id": " trigger-escalation",
+      "name": "Trigger_Escalation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1250, 100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://api:8000/eq/psychological-profile",
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "lead_id": "={{ $('Retell_Call_End').item.json.body.lead_id }}",
+          "answers": {
+            "q1_speed": "={{ $json.dominant_emotion === 'Joy' ? 'A' : 'B' }}",
+            "q2_risk": "B",
+            "q3_communication": "A"
+          }
+        },
+        "options": {}
+      },
+      "id": " create-profile",
+      "name": "Create_Profile",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, sentiment_id: $json.sentiment_id, escalation: $json.escalation }) }}",
+        "options": {}
+      },
+      "id": " respond-success",
+      "name": "Respond_Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1450, 300]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "id": " quota-monitor",
+      "name": "Quota_Monitor_Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [250, 600]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://api:8000/eq/quota/status",
+        "options": {}
+      },
+      "id": " check-quota",
+      "name": "Check_Quota",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [450, 600]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-1",
+              "leftValue": "={{ $json.hume_api.near_limit }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": " if-quota-warning",
+      "name": "Quota_Warning",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [650, 600]
+    },
+    {
+      "parameters": {
+        "channel": "#alerts-eq",
+        "text": "🚨 Hume API Quota Warning: {{ $json.hume_api.usage_percent }}% used ({{ $json.hume_api.minutes_used }}/{{ $json.hume_api.limit }} minutes). Fallback mode activated.",
+        "options": {}
+      },
+      "id": " notify-slack",
+      "name": "Notify_Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.1,
+      "position": [850, 600],
+      "credentials": {
+        "slackApi": {
+          "id": "slack-credentials",
+          "name": "Slack Bot"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "id": "eq-tag",
+      "name": "emotional-intelligence"
+    },
+    {
+      "id": "sara-tag",
+      "name": "sara-agent"
+    }
+  ],
+  "connections": {
+    "Retell_Call_End": {
+      "main": [
+        [
+          {
+            "node": "Check_Quota_Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check_Quota_Status": {
+      "main": [
+        [
+          {
+            "node": "Quota_OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Quota_OK": {
+      "main": [
+        [
+          {
+            "node": "Analyze_With_Hume",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Analyze_Fallback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze_With_Hume": {
+      "main": [
+        [
+          {
+            "node": "Requires_Escalation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze_Fallback": {
+      "main": [
+        [
+          {
+            "node": "Create_Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Requires_Escalation": {
+      "main": [
+        [
+          {
+            "node": "Trigger_Escalation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create_Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger_Escalation": {
+      "main": [
+        [
+          {
+            "node": "Create_Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create_Profile": {
+      "main": [
+        [
+          {
+            "node": "Respond_Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Quota_Monitor_Schedule": {
+      "main": [
+        [
+          {
+            "node": "Check_Quota",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check_Quota": {
+      "main": [
+        [
+          {
+            "node": "Quota_Warning",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Quota_Warning": {
+      "main": [
+        [
+          {
+            "node": "Notify_Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

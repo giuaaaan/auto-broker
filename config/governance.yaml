@@ -1,0 +1,122 @@
+# AUTO-BROKER: Governance Configuration
+# 
+# Configurazione per architettura decisionale asimmetrica
+# Human-on-the-loop (PAOLO) vs Human-in-the-loop (GIULIA)
+#
+# NOTA: Questo file è il fallback. La configurazione effettiva
+# viene caricata dal database (tabella governance_config) se disponibile.
+
+# Feature flags
+governance_enabled: false  # ATTENZIONE: Impostare true solo dopo testing completo
+
+# ============================================================================
+# PAOLO - Carrier Failover Agent
+# ============================================================================
+paolo:
+  # Soglie decisionali (EUR)
+  thresholds:
+    full_auto_max_eur: 5000        # < €5k: nessuna supervisione
+    hot_standby_max_eur: 10000     # €5k-€10k: human-on-the-loop (veto window)
+    human_in_loop_max_eur: 50000   # €10k-€50k: pre-authorization richiesta
+    dual_control_min_eur: 50000    # > €50k: four-eyes principle
+  
+  # Tempistiche (secondi)
+  timeouts:
+    veto_window_seconds: 60                    # Durata finestra veto
+    escalation_first_reminder_seconds: 15      # Primo reminder operatore
+    escalation_backup_seconds: 30              # Notifica operatore backup
+
+# ============================================================================
+# GIULIA - Dispute Resolution Agent  
+# ============================================================================
+giulia:
+  # Soglie decisionali (EUR)
+  thresholds:
+    full_auto_max_eur: 1000        # < €1k: nessuna supervisione
+    fast_track_max_eur: 3000       # €1k-€3k: può passare a hot-standby se confidence alta
+    human_in_loop_max_eur: 10000   # > €3k: sempre pre-authorization
+  
+  # Soglie AI confidence
+  confidence:
+    fast_track_confidence_min: 0.95  # Per fast-track serve confidence > 95%
+  
+  # Tempistiche (ore)
+  timeouts:
+    standard_approval_hours: 4       # Tempo standard approvazione
+    escalation_senior_hours: 24      # Escalation a senior manager
+
+# ============================================================================
+# Business Hours e Policy Orarie
+# ============================================================================
+business_hours:
+  start: "09:00"                   # Inizio orario lavorativo (UTC)
+  end: "18:00"                     # Fine orario lavorativo (UTC)
+  
+  # Policy weekend
+  # Opzioni: "full_auto_restricted", "emergency_only", "human_in_loop_for_all"
+  weekend_policy: "emergency_only"
+  
+  # Policy festività
+  # Opzioni: "full_auto_restricted", "emergency_only", "human_in_loop_for_all"
+  holidays_policy: "human_in_loop_for_all"
+
+# Lista festività (YYYY-MM-DD)
+holidays:
+  - "2026-01-01"  # Capodanno
+  - "2026-01-06"  # Epifania
+  - "2026-04-05"  # Pasqua
+  - "2026-04-06"  # Pasquetta
+  - "2026-04-25"  # Liberazione
+  - "2026-05-01"  # Festa del Lavoro
+  - "2026-06-02"  # Festa della Repubblica
+  - "2026-08-15"  # Ferragosto
+  - "2026-11-01"  # Ognissanti
+  - "2026-12-08"  # Immacolata
+  - "2026-12-25"  # Natale
+  - "2026-12-26"  # Santo Stefano
+
+# ============================================================================
+# Health Check Configuration
+# ============================================================================
+health_check:
+  max_dashboard_downtime_seconds: 30      # Dopo 30s senza heartbeat → degraded
+  max_notification_downtime_seconds: 60   # Dopo 60s senza heartbeat → degraded
+  operator_heartbeat_timeout_seconds: 30  # Operatore considerato offline dopo
+
+# ============================================================================
+# Audit e Compliance
+# ============================================================================
+audit:
+  retention_days: 2555                  # 7 anni (GDPR)
+  ipfs_enabled: false                   # Pubblicazione su IPFS per immutabilità
+  gdpr_article22_compliance: true       # Abilita tracking compliance
+  require_rationale_for_veto: true      # Rationale obbligatorio per veto
+
+# ============================================================================
+# Notifiche
+# ============================================================================
+notifications:
+  channels:
+    push: true
+    email: true
+    sms: true
+    voice_call: false      # Abilitare per importi > €50k
+  
+  escalation:
+    enabled: true
+    primary_timeout_seconds: 30
+    backup_operator_enabled: true
+
+# ============================================================================
+# Rollout Graduale (Fasi)
+# ============================================================================
+# NOTA: Queste impostazioni sono solo documentative.
+# Il cambio fase deve essere fatto manualmente dopo review.
+#
+# Fase 1: shadow_mode        - Log solo, nessuna esecuzione
+# Fase 2: paolo_pilot        - PAOLO attivo con veto window esteso (90s)
+# Fase 3: full_pilot         - Entrambi attivi, soglie conservative
+# Fase 4: production         - Soglie target
+# Fase 5: full_autonomy      - Ottimizzazioni complete
+#
+current_rollout_phase: "shadow_mode"

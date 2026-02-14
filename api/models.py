@@ -83,6 +83,9 @@ class Corriere(Base):
     email_preventivi = Column(String(200))
     telefono = Column(String(50))
     rating_ontime = Column(Numeric(5, 2), default=95.00)
+    on_time_rate = Column(Numeric(5, 2), default=95.00)  # Alias per PAOLO Agent
+    affidabilita = Column(Integer, default=100)  # 0-100 score reputazione
+    wallet_address = Column(String(42), nullable=True)  # Ethereum address per escrow
     costo_per_kg_nazionale = Column(Numeric(8, 4))
     costo_per_kg_internazionale = Column(Numeric(8, 4))
     tempi_consegna_giorni = Column(Integer)
@@ -218,6 +221,7 @@ class Spedizione(Base):
     email_consegnata_inviata = Column(Boolean, default=False)
     recensione_richiesta = Column(Boolean, default=False)
     cmr_url = Column(String(500))
+    pod_hash = Column(String(64), nullable=True)  # IPFS hash POD document
     etichette_urls = Column(ARRAY(String))
     documenti_urls = Column(ARRAY(String))
     eventi_tracking = Column(JSONB, default=list)
@@ -276,3 +280,160 @@ class ChiamataRetell(Base):
     note = Column(Text)
     created_at = Column(DateTime(timezone=True), default=func.now())
     completed_at = Column(DateTime(timezone=True))
+
+
+class RetentionAttempt(Base):
+    """
+    Tentativi di chiamata di retention da parte dell'agente FRANCO.
+    
+    Traccia ogni tentativo di contattare un cliente 7 giorni dopo 
+    la consegna di una spedizione per verificare soddisfazione e
+    proporre nuove prenotazioni.
+    """
+    __tablename__ = "retention_attempts"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    spedizione_id = Column(UUID(as_uuid=True), ForeignKey("spedizioni.id"), nullable=False)
+    attempted_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
+    call_outcome = Column(String(50), default="pending")  # "pending", "success", "no_answer", "voicemail", "failed"
+    sentiment_score = Column(Float, nullable=True)  # Score da -1.0 a 1.0
+    rebooking_offered = Column(Boolean, default=False)
+    rebooking_accepted = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), default=func.now())
+    updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
+    
+    # Relazione
+    spedizione = relationship("Spedizione", backref="retention_attempts")
+
+
+class SentimentCache(Base):
+    """
+    Cache semantica per risultati sentiment analysis Hume AI.
+    
+    Utilizza pgvector per storage embedding e ricerca per similarità.
+    Riduce costi Hume AI del 90% evitando chiamate duplicate
+    per contenuto semanticamente simile.
+    
+    Privacy: Non salva transcription completa, solo hash SHA256
+    e preview (primi 100 char) per debug.
+    """
+    __tablename__ = "sentiment_cache"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    
+    # Embedding vettoriale (384 dimensioni per paraphrase-multilingual-MiniLM)
+    # Usa ARRAY(Float) per compatibilità, pgvector opzionale
+    embedding = Column(ARRAY(Float), nullable=False)
+    
+    # Identificazione (no PII completa)
+    transcription_hash = Column(String(64), unique=True, nullable=False, index=True)
+    transcription_preview = Column(String(100))  # Primi 100 char per debug
+    
+    # Risultato cacheato
+    sentiment_result = Column(JSONB, nullable=False)
+    emotion_scores = Column(JSONB)  # Estratto per query veloci
+    
+    # Metadati
+    created_at = Column(DateTime(timezone=True), default=func.now())
+    last_accessed = Column(DateTime(timezone=True), default=func.now())
+    hit_count = Column(Integer, default=1)
+    
+    # Indici
+    __table_args__ = (
+        Index('idx_sentiment_created', 'created_at'),
+        Index('idx_sentiment_hit_count', 'hit_count'),
+    )
+
+
+class CostEvent(Base):
+    """
+    Eventi di costo per tracciamento granulari delle spese.
+    
+    Traccia ogni costo unitario (API call, transazione blockchain, lookup)
+    con precisione fino a 6 decimali per micro-transazioni.
+    """
+    __tablename__ = "cost_events"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    timestamp = Column(DateTime(timezone=True), default=func.now(), nullable=False, index=True)
+    event_type = Column(String(50), nullable=False)  # "hume_api_call", "blockchain_tx", "dat_iq_lookup"
+    shipment_id = Column(UUID(as_uuid=True), ForeignKey("spedizioni.id"), nullable=True)
+    customer_id = Column(UUID(as_uuid=True), ForeignKey("leads.id"), nullable=True)
+    cost_eur = Column(Numeric(10, 6), nullable=False)  # 6 decimali per micro-transazioni
+    provider = Column(String(50), nullable=False)  # "hume", "dat_iq", "polygon"
+    metadata = Column(JSONB, default=dict)  # es. {"duration_seconds": 120, "gas_used": 21000}
+    created_at = Column(DateTime(timezone=True), default=func.now())
+    
+    # Relazioni
+    shipment = relationship("Spedizione", backref="cost_events")
+    customer = relationship("Lead", backref="cost_events")
+    
+    # Indici per query efficienti
+    __table_args__ = (
+        Index('idx_cost_events_customer_time', 'customer_id', 'timestamp'),
+        Index('idx_cost_events_shipment', 'shipment_id'),
+        Index('idx_cost_events_provider', 'provider', 'timestamp'),
+    )
+
+
+class ZKPriceCommitment(Base):
+    """
+    Commitment Zero-Knowledge per verifica fair pricing.
+    
+    Memorizza proof ZK che il markup sia <= 30% senza rivelare
+    il costo base del cliente (che rimane privato).
+    """
+    __tablename__ = "zk_price_commitments"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    quote_id = Column(UUID(as_uuid=True), ForeignKey("preventivi.id"), nullable=False, unique=True)
+    commitment = Column(String(64), nullable=False, index=True)  # SHA256 hash
+    proof = Column(JSONB, nullable=False)  # Proof ZK completa
+    public_inputs = Column(JSONB, nullable=False)  # Input pubblici per verifica
+    selling_price = Column(Numeric(10, 2), nullable=False)  # Prezzo vendita (pubblico)
+    salt_hash = Column(String(64), nullable=False)  # Hash del salt (NON il salt!)
+    # NOTA: base_cost non viene MAI salvato in chiaro (solo commitment)
+    created_at = Column(DateTime(timezone=True), default=func.now())
+    revealed_at = Column(DateTime(timezone=True), nullable=True)  # Per audit GDPR
+    revealed_by = Column(String(100), nullable=True)  # Admin che ha fatto reveal
+    
+    # Relazione
+    quote = relationship("Preventivo", backref="zk_commitment")
+    
+    # Indici
+    __table_args__ = (
+        Index('idx_zk_commitment_lookup', 'commitment', 'created_at'),
+    )
+
+
+class CarrierChange(Base):
+    """
+    Log cambio carrier per self-healing supply chain (PAOLO Agent).
+    
+    Traccia ogni failover atomico eseguito da PAOLO quando
+    un carrier viene blacklisted o ha performance degradate.
+    """
+    __tablename__ = "carrier_changes"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    spedizione_id = Column(UUID(as_uuid=True), ForeignKey("spedizioni.id"), nullable=False)
+    vecchio_carrier_id = Column(UUID(as_uuid=True), ForeignKey("corrieri.id"), nullable=False)
+    nuovo_carrier_id = Column(UUID(as_uuid=True), ForeignKey("corrieri.id"), nullable=False)
+    motivo = Column(String(500), nullable=False)
+    eseguito_da = Column(String(50), default="paolo_agent")  # "paolo_agent", "admin", "orchestrator"
+    tx_hash = Column(String(66), nullable=True)  # Blockchain transaction hash
+    success = Column(Boolean, default=True)
+    rollback_tx_hash = Column(String(66), nullable=True)  # Se rollback eseguito
+    created_at = Column(DateTime(timezone=True), default=func.now())
+    
+    # Relazioni
+    spedizione = relationship("Spedizione", backref="carrier_changes")
+    vecchio_carrier = relationship("Corriere", foreign_keys=[vecchio_carrier_id], backref="changes_from")
+    nuovo_carrier = relationship("Corriere", foreign_keys=[nuovo_carrier_id], backref="changes_to")
+    
+    # Indici
+    __table_args__ = (
+        Index('idx_carrier_change_shipment', 'spedizione_id'),
+        Index('idx_carrier_change_old_carrier', 'vecchio_carrier_id', 'created_at'),
+        Index('idx_carrier_change_success', 'success', 'created_at'),
+    )

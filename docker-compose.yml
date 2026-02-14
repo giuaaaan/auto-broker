@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-broker_pass_2024}
       POSTGRES_DB: ${POSTGRES_DB:-broker_db}
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
@@ -25,7 +25,7 @@ services:
     container_name: auto-broker-redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "6380:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -107,10 +107,58 @@ services:
     networks:
       - auto-broker-network
 
+  chroma:
+    image: chromadb/chroma:0.5.5
+    container_name: auto-broker-chroma
+    restart: unless-stopped
+    ports:
+      - "8001:8000"
+    environment:
+      - ALLOW_RESET=true
+      - ANONYMIZED_TELEMETRY=false
+    volumes:
+      - chroma_data:/chroma/chroma
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - auto-broker-network
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: auto-broker-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    environment:
+      - OLLAMA_ORIGINS=*
+    volumes:
+      - ollama_models:/root/.ollama
+    # Uncomment if GPU available:
+    # runtime: nvidia
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - auto-broker-network
+
 volumes:
   postgres_data:
   redis_data:
   n8n_data:
+  chroma_data:
+  ollama_models:
 
 networks:
   auto-broker-network:

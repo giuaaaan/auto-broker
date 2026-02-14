@@ -1,0 +1,158 @@
+"""
+AUTO-BROKER Pytest Configuration - Big Tech Standards
+Async testing with proper event loop isolation
+"""
+import pytest
+import pytest_asyncio
+import asyncio
+import uuid
+from decimal import Decimal
+
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'api'))
+
+from httpx import AsyncClient, ASGITransport
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+
+from models import Base, Lead, Qualificazione, Corriere, Preventivo, Contratto
+from main import app
+from services.database import get_db
+
+
+# Database configuration
+TEST_DATABASE_URL = os.getenv(
+    "DATABASE_URL", 
+    "postgresql+asyncpg://broker_user:broker_pass_2024@localhost:5433/broker_db"
+)
+
+
+# =============================================================================
+# DATABASE SETUP PER TEST (function-scoped engine)
+# =============================================================================
+@pytest_asyncio.fixture(autouse=True)
+async def manage_database():
+    """Create fresh engine, setup tables, cleanup after test."""
+    # Create fresh engine for this test
+    engine = create_async_engine(TEST_DATABASE_URL, echo=False, poolclass=None)
+    
+    # Create tables
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    
+    # Override dependency
+    SessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    
+    async def override_get_db():
+        async with SessionLocal() as session:
+            try:
+                yield session
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
+            finally:
+                await session.close()
+    
+    original_override = app.dependency_overrides.get(get_db)
+    app.dependency_overrides[get_db] = override_get_db
+    
+    yield
+    
+    # Cleanup
+    app.dependency_overrides[get_db] = original_override
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+    await engine.dispose()
+
+
+# =============================================================================
+# ASYNC CLIENT FIXTURE
+# =============================================================================
+@pytest_asyncio.fixture
+async def async_client():
+    """Create AsyncClient for testing FastAPI endpoints."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac
+
+
+# =============================================================================
+# DATABASE SESSION FIXTURE
+# =============================================================================
+@pytest_asyncio.fixture
+async def db_session(manage_database):
+    """Provide a database session for tests."""
+    # Create fresh engine and session
+    engine = create_async_engine(TEST_DATABASE_URL, echo=False, poolclass=None)
+    SessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    
+    async with SessionLocal() as session:
+        yield session
+    
+    await engine.dispose()
+
+
+# =============================================================================
+# HELPER FIXTURES
+# =============================================================================
+@pytest_asyncio.fixture
+async def sample_carrier(db_session):
+    """Create a sample carrier in database."""
+    carrier = Corriere(
+        id=uuid.uuid4(),
+        nome="Test Carrier",
+        codice=f"TEST_{uuid.uuid4().hex[:8].upper()}",
+        tipo="nazionale",
+        rating_ontime=97.0,
+        costo_per_kg_nazionale=Decimal("0.85"),
+        costo_per_kg_internazionale=Decimal("2.50"),
+        tempi_consegna_giorni=2,
+        attivo=True,
+        priorita=1
+    )
+    db_session.add(carrier)
+    await db_session.commit()
+    await db_session.refresh(carrier)
+    return carrier
+
+
+@pytest_asyncio.fixture
+async def sample_lead(db_session):
+    """Create a sample lead in database."""
+    lead = Lead(
+        id=uuid.uuid4(),
+        nome="Mario",
+        cognome="Rossi",
+        azienda="Rossi Srl",
+        telefono="+393451234567",
+        email=f"mario{uuid.uuid4().hex[:8]}@rossi.it",
+        status="nuovo"
+    )
+    db_session.add(lead)
+    await db_session.commit()
+    await db_session.refresh(lead)
+    return lead
+
+
+@pytest_asyncio.fixture
+async def sample_qualification(db_session, sample_lead):
+    """Create a sample qualification in database."""
+    qual = Qualificazione(
+        id=uuid.uuid4(),
+        lead_id=sample_lead.id,
+        volume_kg_mensile=Decimal("500.00"),
+        lane_origine="Milano, Italia",
+        lane_destinazione="Roma, Italia",
+        frequenza="settimanale",
+        prezzo_attuale_kg=Decimal("1.20"),
+        tipo_merce="Abbigliamento",
+        credit_score=85,
+        partita_iva="IT12345678901",
+        status="approvato",
+        agente="marco"
+    )
+    db_session.add(qual)
+    await db_session.commit()
+    await db_session.refresh(qual)
+    return qual

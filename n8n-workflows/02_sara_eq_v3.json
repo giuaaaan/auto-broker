@@ -1,0 +1,211 @@
+{
+  "name": "SARA_EQ_Quota_Aware",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "retell-call-end",
+        "responseMode": "responseNode"
+      },
+      "id": "trigger-retell-end",
+      "name": "Call_End",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "retell-end"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://api:8000/eq/health",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "check-health",
+      "name": "Check_Health",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://api:8000/eq/analyze-sentiment",
+        "sendBody": true,
+        "contentType": "application/json",
+        "body": {
+          "lead_id": "={{ $json.lead_id }}",
+          "recording_url": "={{ $json.recording_url }}",
+          "transcription": "={{ $json.transcription }}"
+        },
+        "options": {
+          "timeout": 35000
+        }
+      },
+      "id": "analyze-sentiment",
+      "name": "Analyze_Sentiment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "escalation-check",
+              "leftValue": "={{ $json.requires_escalation }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ]
+        }
+      },
+      "id": "check-escalation",
+      "name": "Check_Escalation",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "channel": "#sales-escalations",
+        "text": "🚨 ESCALATION REQUIRED\n\nLead: {{ $json.lead_id }}\nDominant Emotion: {{ $json.dominant_emotion }}\nSentiment Score: {{ $json.sentiment_score }}\nMethod: {{ $json.analysis_method }}\n\nTranscript: {{ $json.transcription[:200] }}...",
+        "options": {}
+      },
+      "id": "slack-alert",
+      "name": "Slack_Escalation_Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [1050, 200]
+    },
+    {
+      "parameters": {
+        "documentId": "={{ $json.lead_id }}",
+        "fields": "={{ $json }}",
+        "collection": "sentiment_analysis",
+        "options": {}
+      },
+      "id": "firestore-store",
+      "name": "Firestore_Store",
+      "type": "n8n-nodes-base.googleFirebaseCloudFirestoreDocument",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "respond-webhook",
+      "name": "Respond_to_Retell",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1250, 300]
+    }
+  ],
+  "connections": {
+    "Call_End": {
+      "main": [
+        [
+          {
+            "node": "Check_Health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check_Health": {
+      "main": [
+        [
+          {
+            "node": "Analyze_Sentiment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze_Sentiment": {
+      "main": [
+        [
+          {
+            "node": "Check_Escalation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check_Escalation": {
+      "main": [
+        [
+          {
+            "node": "Slack_Escalation_Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Firestore_Store",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Firestore_Store",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack_Escalation_Alert": {
+      "main": [
+        [
+          {
+            "node": "Firestore_Store",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Firestore_Store": {
+      "main": [
+        [
+          {
+            "node": "Respond_to_Retell",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "emotional-intelligence"
+    },
+    {
+      "name": "production"
+    }
+  ]
+}

@@ -84,9 +84,14 @@ app.add_middleware(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv("ALLOWED_ORIGINS", "*").split(","),
+    allow_origins=[
+        "http://localhost:5173",  # Dashboard React dev
+        "http://localhost:3000",  # Alternative dev port
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:3000",
+    ] + os.getenv("ALLOWED_ORIGINS", "*").split(","),
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
@@ -1091,7 +1096,49 @@ async def disruption_alert(
 
 
 # ==========================================
-# DASHBOARD STATS
+# EQ ROUTES (Emotional Intelligence)
+# ==========================================
+from eq_routes import router as eq_router
+app.include_router(eq_router)
+
+# ==========================================
+# FRANCO ROUTES (Retention Agent)
+# ==========================================
+from routers.franco import router as franco_router
+app.include_router(franco_router)
+
+# ==========================================
+# COST DASHBOARD ROUTES
+# ==========================================
+from routers.costs import router as costs_router
+app.include_router(costs_router)
+
+# ==========================================
+# SEMANTIC CACHE ROUTES
+# ==========================================
+from routers.cache import router as cache_router
+app.include_router(cache_router)
+
+# ==========================================
+# ZERO-KNOWLEDGE PRICING ROUTES
+# ==========================================
+from routers.zk_pricing import router as zk_pricing_router
+app.include_router(zk_pricing_router)
+
+# ==========================================
+# AUTH ROUTES (JWT)
+# ==========================================
+from routers.auth import router as auth_router
+app.include_router(auth_router)
+
+# ==========================================
+# DASHBOARD ROUTES (Mission Control)
+# ==========================================
+from routers.dashboard import router as dashboard_router
+app.include_router(dashboard_router)
+
+# ==========================================
+# LEGACY DASHBOARD STATS
 # ==========================================
 @app.get("/stats/dashboard", tags=["Dashboard"])
 @limiter.limit("30/minute")

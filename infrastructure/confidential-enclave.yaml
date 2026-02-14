@@ -1,0 +1,525 @@
+# AUTO-BROKER: Confidential Computing Enclave Deployment
+# Supporta AMD SEV-SNP e Intel TDX per isolamento hardware degli agenti AI
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: confidential-agents
+  labels:
+    confidential-computing: "enabled"
+    pod-security.kubernetes.io/enforce: restricted
+---
+# RuntimeClass per Kata Containers con confidential support
+apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata:
+  name: kata-cc-amd-sev
+handler: kata-cc
+scheduling:
+  nodeSelector:
+    confidential-computing: "amd-sev-snp"
+  tolerations:
+  - key: "confidential-computing"
+    operator: "Equal"
+    value: "amd-sev-snp"
+    effect: "NoSchedule"
+---
+apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata:
+  name: kata-cc-intel-tdx
+handler: kata-cc
+scheduling:
+  nodeSelector:
+    confidential-computing: "intel-tdx"
+  tolerations:
+  - key: "confidential-computing"
+    operator: "Equal"
+    value: "intel-tdx"
+    effect: "NoSchedule"
+---
+# ConfigMap per configurazione enclave
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: enclave-config
+  namespace: confidential-agents
+data:
+  ENCLAVE_MODE: "sev-snp"  # o "intel-tdx", "simulation"
+  ENCLAVE_DEBUG: "false"
+  ATTESTATION_ENABLED: "true"
+  MEASUREMENT_LOG_LEVEL: "info"
+  MEMORY_ENCRYPTION: "enabled"
+  SECURE_BOOT: "required"
+  # Vault configuration per enclave
+  VAULT_ADDR: "https://vault.internal:8200"
+  VAULT_ENCLAVE_PATH: "enclave-agents"
+---
+# Secret per initial attestation (rotated automaticamente)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: enclave-identity
+  namespace: confidential-agents
+type: Opaque
+stringData:
+  # Questo è un placeholder - in produzione generato da Vault
+  enclave-id: "auto-broker-agent-enclave-001"
+  attestation-nonce: "random-nonce-12345"
+---
+# CSI Driver config per secrets injection
+apiVersion: secrets-store.csi.x-k8s.io/v1
+kind: SecretProviderClass
+metadata:
+  name: enclave-secrets
+  namespace: confidential-agents
+spec:
+  provider: vault
+  parameters:
+    vaultAddress: "https://vault.internal:8200"
+    roleName: "enclave-agent-role"
+    objects: |
+      - objectName: "hume-api-key"
+        secretPath: "enclave-agents/data/hume"
+        secretKey: "api-key"
+      - objectName: "retell-api-key"
+        secretPath: "enclave-agents/data/retell"
+        secretKey: "api-key"
+      - objectName: "db-credentials"
+        secretPath: "enclave-agents/data/database"
+        secretKey: "connection-string"
+  secretObjects:
+  - secretName: enclave-agent-secrets
+    type: Opaque
+    data:
+    - objectName: hume-api-key
+      key: HUME_API_KEY
+    - objectName: retell-api-key
+      key: RETELL_API_KEY
+    - objectName: db-credentials
+      key: DATABASE_URL
+---
+# Deployment SARA Agent (Acquisition) in Enclave
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sara-agent-enclave
+  namespace: confidential-agents
+  labels:
+    app: sara-agent
+    agent-type: acquisition
+    confidential: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sara-agent
+  template:
+    metadata:
+      labels:
+        app: sara-agent
+        confidential: "true"
+      annotations:
+        # Measurement atteso (hash del container image)
+        confidential-computing/measurement: "sha256:expected_measurement_here"
+        # Policy: solo questo measurement può ricevere secrets
+        confidential-computing/policy: "strict"
+    spec:
+      runtimeClassName: kata-cc-amd-sev
+      # Node selector per nodi con SEV-SNP
+      nodeSelector:
+        confidential-computing: "amd-sev-snp"
+        kubernetes.io/arch: amd64
+      tolerations:
+      - key: "confidential-computing"
+        operator: "Equal"
+        value: "amd-sev-snp"
+        effect: "NoSchedule"
+      
+      # Service Account con permessi minimi
+      serviceAccountName: enclave-agent-sa
+      automountServiceAccountToken: false
+      
+      containers:
+      - name: sara-agent
+        image: auto-broker/enclave-agent:v2.1.0
+        imagePullPolicy: Always
+        
+        # Resources con richiesta SEV-SNP
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+            # Richiesta hardware SEV-SNP
+            amd.com/sev-snp: "1"
+            # Memory encryption abilitata
+            confidential-computing/memory-encryption: "enabled"
+        
+        env:
+        - name: AGENT_NAME
+          value: "sara"
+        - name: AGENT_TYPE
+          value: "acquisition"
+        - name: ENCLAVE_MODE
+          valueFrom:
+            configMapKeyRef:
+              name: enclave-config
+              key: ENCLAVE_MODE
+        - name: ATTESTATION_ENABLED
+          value: "true"
+        - name: MEASUREMENT_LOG_LEVEL
+          value: "info"
+        # Secrets da CSI driver
+        - name: HUME_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: enclave-agent-secrets
+              key: HUME_API_KEY
+        - name: RETELL_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: enclave-agent-secrets
+              key: RETELL_API_KEY
+        
+        # Security context minimale
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
+        
+        # Volume mounts
+        volumeMounts:
+        - name: secrets-store-inline
+          mountPath: "/mnt/secrets-store"
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+        - name: attestation-socket
+          mountPath: /run/attestation
+        
+        # Health checks
+        livenessProbe:
+          httpGet:
+            path: /health/enclave
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready/enclave
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        
+        # No logs su disco - solo stdout (cifrato da SEV)
+        args:
+        - "--log-driver=none"
+        - "--stdout-only"
+        - "--memory-encryption=strict"
+      
+      # Sidecar per attestation
+      - name: attestation-sidecar
+        image: auto-broker/attestation-sidecar:v1.0.0
+        resources:
+          limits:
+            memory: "256Mi"
+            cpu: "100m"
+        env:
+        - name: ATTESTATION_TYPE
+          value: "sev-snp"
+        - name: VAULT_ADDR
+          valueFrom:
+            configMapKeyRef:
+              name: enclave-config
+              key: VAULT_ADDR
+        volumeMounts:
+        - name: attestation-socket
+          mountPath: /run/attestation
+        - name: tmp
+          mountPath: /tmp
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+      
+      volumes:
+      # CSI secrets store
+      - name: secrets-store-inline
+        csi:
+          driver: secrets-store.csi.k8s.io
+          readOnly: true
+          volumeAttributes:
+            secretProviderClass: enclave-secrets
+      
+      # Socket per comunicazione attestation
+      - name: attestation-socket
+        emptyDir:
+          medium: Memory
+          sizeLimit: 10Mi
+      
+      # TMP in RAM (cifrata da SEV)
+      - name: tmp
+        emptyDir:
+          medium: Memory
+          sizeLimit: 100Mi
+      
+      # No access to host filesystem
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+---
+# Deployment MARCO Agent (Qualification) in Enclave
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: marco-agent-enclave
+  namespace: confidential-agents
+  labels:
+    app: marco-agent
+    agent-type: qualification
+    confidential: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: marco-agent
+  template:
+    metadata:
+      labels:
+        app: marco-agent
+        confidential: "true"
+      annotations:
+        confidential-computing/measurement: "sha256:expected_measurement_marco"
+    spec:
+      runtimeClassName: kata-cc-amd-sev
+      nodeSelector:
+        confidential-computing: "amd-sev-snp"
+      tolerations:
+      - key: "confidential-computing"
+        operator: "Equal"
+        value: "amd-sev-snp"
+        effect: "NoSchedule"
+      serviceAccountName: enclave-agent-sa
+      automountServiceAccountToken: false
+      containers:
+      - name: marco-agent
+        image: auto-broker/enclave-agent:v2.1.0
+        resources:
+          limits:
+            memory: "2Gi"
+            cpu: "1500m"
+            amd.com/sev-snp: "1"
+        env:
+        - name: AGENT_NAME
+          value: "marco"
+        - name: AGENT_TYPE
+          value: "qualification"
+        - name: ENCLAVE_MODE
+          value: "sev-snp"
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: secrets-store-inline
+          mountPath: "/mnt/secrets-store"
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: secrets-store-inline
+        csi:
+          driver: secrets-store.csi.k8s.io
+          readOnly: true
+          volumeAttributes:
+            secretProviderClass: enclave-secrets
+      - name: tmp
+        emptyDir:
+          medium: Memory
+---
+# Deployment FRANCO Agent (Retention) in Enclave
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: franco-agent-enclave
+  namespace: confidential-agents
+  labels:
+    app: franco-agent
+    agent-type: retention
+    confidential: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: franco-agent
+  template:
+    metadata:
+      labels:
+        app: franco-agent
+        confidential: "true"
+      annotations:
+        confidential-computing/measurement: "sha256:expected_measurement_franco"
+    spec:
+      runtimeClassName: kata-cc-amd-sev
+      nodeSelector:
+        confidential-computing: "amd-sev-snp"
+      tolerations:
+      - key: "confidential-computing"
+        operator: "Equal"
+        value: "amd-sev-snp"
+        effect: "NoSchedule"
+      serviceAccountName: enclave-agent-sa
+      automountServiceAccountToken: false
+      containers:
+      - name: franco-agent
+        image: auto-broker/enclave-agent:v2.1.0
+        resources:
+          limits:
+            memory: "1.5Gi"
+            cpu: "1000m"
+            amd.com/sev-snp: "1"
+        env:
+        - name: AGENT_NAME
+          value: "franco"
+        - name: AGENT_TYPE
+          value: "retention"
+        - name: ENCLAVE_MODE
+          value: "sev-snp"
+        - name: RATE_LIMIT_PER_HOUR
+          value: "10"
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+        volumeMounts:
+        - name: secrets-store-inline
+          mountPath: "/mnt/secrets-store"
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: secrets-store-inline
+        csi:
+          driver: secrets-store.csi.k8s.io
+          readOnly: true
+          volumeAttributes:
+            secretProviderClass: enclave-secrets
+      - name: tmp
+        emptyDir:
+          medium: Memory
+---
+# Service Account minimale
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: enclave-agent-sa
+  namespace: confidential-agents
+  annotations:
+    # Binding stretto con enclave measurement
+    confidential-computing/bound-to-measurement: "true"
+automountServiceAccountToken: false
+---
+# RBAC minimale
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: enclave-agent-role
+  namespace: confidential-agents
+rules:
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get"]
+  resourceNames: ["enclave-config"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get"]
+  resourceNames: ["enclave-agent-secrets"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: enclave-agent-rb
+  namespace: confidential-agents
+subjects:
+- kind: ServiceAccount
+  name: enclave-agent-sa
+  namespace: confidential-agents
+roleRef:
+  kind: Role
+  name: enclave-agent-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# Network Policy - isolamento massimo
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: enclave-isolation
+  namespace: confidential-agents
+spec:
+  podSelector:
+    matchLabels:
+      confidential: "true"
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Solo dal API gateway
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: auto-broker
+    - podSelector:
+        matchLabels:
+          app: api-gateway
+    ports:
+    - protocol: TCP
+      port: 8080
+  egress:
+  # Solo verso Vault e API esterne necessarie
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: vault
+    ports:
+    - protocol: TCP
+      port: 8200
+  - to:
+    # Hume AI API
+    - ipBlock:
+        cidr: 0.0.0.0/0  # In produzione: IP specifici
+    ports:
+    - protocol: TCP
+      port: 443
+  # DNS
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: UDP
+      port: 53
+---
+# PodDisruptionBudget per garantire availability
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: enclave-agent-pdb
+  namespace: confidential-agents
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      confidential: "true"

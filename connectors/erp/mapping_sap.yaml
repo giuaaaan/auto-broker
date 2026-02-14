@@ -1,0 +1,196 @@
+# SAP S/4HANA Field Mappings for AUTO-BROKER
+# Configuration file for SAP OData entity mappings
+
+# Sales Order (VBAK/VBAP tables)
+sales_order:
+  sap_entity: "A_SalesOrder"
+  sap_service: "API_SALES_ORDER_SRV"
+  fields:
+    # Header fields (VBAK)
+    SalesOrder: "order_id"
+    SalesOrderType: "order_type"
+    SalesOrganization: "sales_org"
+    DistributionChannel: "distribution_channel"
+    SoldToParty: "customer_id"
+    PurchaseOrderByCustomer: "customer_po"
+    TotalNetAmount: "total_net_amount"
+    TransactionCurrency: "currency"
+    RequestedDeliveryDate: "requested_delivery_date"
+    OverallTotalDeliveryStatus: "delivery_status"
+    OverallSDProcessStatus: "processing_status"
+    CreationDate: "created_at"
+    LastChangeDateTime: "updated_at"
+  
+  # Line items (VBAP)
+  line_item_entity: "A_SalesOrderItem"
+  line_fields:
+    SalesOrderItem: "line_number"
+    Material: "material_id"
+    MaterialDescription: "material_description"
+    RequestedQuantity: "quantity"
+    RequestedQuantityUnit: "quantity_unit"
+    NetAmount: "line_amount"
+    Plant: "plant"
+    ShippingPoint: "shipping_point"
+
+# Customer Master (KNA1)
+customer:
+  sap_entity: "A_Customer"
+  sap_service: "API_BUSINESS_PARTNER"
+  fields:
+    Customer: "customer_id"
+    OrganizationBPName1: "name"
+    OrganizationBPName2: "name_2"
+    CustomerClassification: "classification"
+    AuthorizationGroup: "auth_group"
+    VATRegistration: "vat_number"
+    CreatedOn: "created_at"
+  
+  # Address (ADRC via association)
+  address_entity: "A_CustomerSalesArea"
+  address_fields:
+    StreetName: "street"
+    CityName: "city"
+    PostalCode: "postal_code"
+    Country: "country"
+    Region: "region"
+    TelephoneNumber: "phone"
+    FaxNumber: "fax"
+
+# Material Master (MARA)
+material:
+  sap_entity: "A_Product"
+  sap_service: "API_PRODUCT_SRV"
+  fields:
+    Product: "material_id"
+    ProductType: "material_type"
+    ProductDescription: "description"
+    BaseUnit: "base_unit"
+    GrossWeight: "gross_weight_kg"
+    NetWeight: "net_weight_kg"
+    WeightUnit: "weight_unit"
+    ProductLength: "length_mm"
+    ProductWidth: "width_mm"
+    ProductHeight: "height_mm"
+    ProductMeasurementUnit: "dimension_unit"
+    DangerousGoodsInd: "dangerous_goods_indicator"
+    
+# Outbound Delivery (LIKP/LIPS)
+delivery:
+  sap_entity: "A_OutboundDelivery"
+  sap_service: "API_OUTBOUND_DELIVERY_SRV"
+  fields:
+    DeliveryDocument: "delivery_id"
+    DeliveryDocumentType: "delivery_type"
+    ShipToParty: "customer_id"
+    Supplier: "supplier_id"
+    PlannedGoodsIssueDate: "planned_ship_date"
+    ActualGoodsIssueDate: "actual_ship_date"
+    TotalGrossWeight: "total_weight_kg"
+    WeightUnit: "weight_unit"
+    TransportationPlanningDate: "transport_planning_date"
+    LoadingDate: "loading_date"
+    DeliveryDate: "delivery_date"
+    DeliveryTime: "delivery_time"
+    ShippingPoint: "shipping_point"
+    ShippingConditions: "shipping_conditions"
+    
+  # Delivery items (LIPS)
+  item_entity: "A_OutboundDeliveryItem"
+  item_fields:
+    DeliveryDocumentItem: "item_number"
+    Material: "material_id"
+    ActualDeliveryQuantity: "delivered_quantity"
+    DeliveryQuantityUnit: "quantity_unit"
+    StorageLocation: "storage_location"
+    Batch: "batch"
+    
+# Vendor/Carrier Master (LFA1)
+vendor:
+  sap_entity: "A_Supplier"
+  sap_service: "API_BUSINESS_PARTNER"
+  fields:
+    Supplier: "vendor_id"
+    OrganizationBPName1: "name"
+    OrganizationBPName2: "name_2"
+    VATRegistration: "vat_number"
+    SupplierAccountGroup: "account_group"
+    BusinessPartnerIDByExtSystem: "scac_code"  # Standard Carrier Alpha Code
+    CreatedOn: "created_at"
+
+# Purchase Order (EKKO/EKPO) - for subcontracting/purchasing
+purchase_order:
+  sap_entity: "A_PurchaseOrder"
+  sap_service: "API_PURCHASE_ORDER_SRV"
+  fields:
+    PurchaseOrder: "po_id"
+    PurchaseOrderType: "po_type"
+    Supplier: "vendor_id"
+    PurchaseOrderNetAmount: "net_amount"
+    DocumentCurrency: "currency"
+    PurchaseOrderDate: "po_date"
+    
+# Proof of Delivery (Goods Receipt)
+pod_confirmation:
+  sap_entity: "A_InboundDelivery"
+  sap_service: "API_INBOUND_DELIVERY_SRV"
+  fields:
+    InboundDelivery: "delivery_id"
+    ActualGoodsReceiptDate: "receipt_date"
+    BillOfLading: "bol_number"
+    ShippingNotificationReference: "tracking_number"
+    
+# Plant/Warehouse (T001W)
+plant:
+  sap_entity: "A_Plant"
+  sap_service: "API_PLANT_SRV"
+  fields:
+    Plant: "plant_id"
+    PlantName: "name"
+    CityName: "city"
+    PostalCode: "postal_code"
+    Country: "country"
+    Region: "region"
+    FactoryCalendar: "calendar_id"
+    
+# Shipping Point (TVST)
+shipping_point:
+  sap_entity: "A_ShippingPoint"
+  sap_service: "API_SALES_ORGANIZATION_SRV"
+  fields:
+    ShippingPoint: "shipping_point_id"
+    ShippingPointName: "name"
+
+# Value mappings (SAP values to internal values)
+value_mappings:
+  sales_order_status:
+    "A": "open"
+    "B": "partial"
+    "C": "complete"
+    "D": "in_process"
+  
+  delivery_status:
+    "A": "not_delivered"
+    "B": "partially_delivered"
+    "C": "completely_delivered"
+  
+  unit_of_measure:
+    "KG": "kg"
+    "GRM": "g"
+    "M": "m"
+    "M3": "m3"
+    "PAL": "pallet"
+    "CAR": "carton"
+
+# Sync configuration
+sync:
+  batch_size: 100
+  poll_interval_minutes: 5
+  delta_field: "LastChangeDateTime"
+  timestamp_format: "ISO8601"
+  
+  # Retry configuration
+  retry:
+    max_attempts: 5
+    backoff_base_seconds: 2
+    max_backoff_seconds: 60

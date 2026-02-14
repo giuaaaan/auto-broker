@@ -1,0 +1,43 @@
+# AUTO-BROKER Istio Service Mesh - Zero Trust Configuration
+# PeerAuthentication: Enforce mTLS between all services
+# Security - P0 Critical
+
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: auto-broker-default
+  namespace: auto-broker
+spec:
+  mtls:
+    mode: STRICT
+  # STRICT: Reject plaintext traffic
+  # PERMISSIVE: Allow both plaintext and mTLS (for migration)
+  # DISABLE: Allow plaintext only (dev only)
+
+---
+# Namespace-wide mTLS policy
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: auto-broker-namespace-mtls
+  namespace: auto-broker
+spec:
+  selector:
+    matchLabels:
+      security.istio.io/tlsMode: istio
+  mtls:
+    mode: STRICT
+
+---
+# DestinationRule for automatic mTLS
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: auto-broker-mtls
+  namespace: auto-broker
+spec:
+  host: "*.auto-broker.svc.cluster.local"
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL
+  # ISTIO_MUTUAL: Use Istio's mTLS certificates
