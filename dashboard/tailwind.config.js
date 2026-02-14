@@ -13,6 +13,7 @@ export default {
         primary: '#00D9FF',
         success: '#00FF88',
         warning: '#FF6B00',
+        'warning-foreground': '#1a0f00',
         danger: '#FF2D55',
         'text-primary': '#FFFFFF',
         'text-secondary': '#A0A0A0',

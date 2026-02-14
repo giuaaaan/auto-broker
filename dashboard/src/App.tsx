@@ -14,6 +14,7 @@ import SettingsPage from '@/pages/Settings';
 // Components
 import { ToastContainer } from '@/components/ui/ToastContainer';
 import { ModalContainer } from '@/components/ui/ModalContainer';
+import { DemoBanner } from '@/components/layout/DemoBanner';
 
 // ============================================
 // PROTECTED ROUTE COMPONENT
@@ -56,6 +57,7 @@ const WebSocketWrapper = ({ children }: { children: React.ReactNode }) => {
 function App() {
   return (
     <Router>
+      <DemoBanner />
       <AnimatePresence mode="wait">
         <Routes>
           <Route path="/login" element={<LoginPage />} />

@@ -1,9 +1,11 @@
 """
 AUTO-BROKER: FastAPI Main Application
 Production-ready with rate limiting, error handling, and structured logging.
+DEMO_MODE support for zero-cost testing.
 """
 import os
 import time
+import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -21,6 +23,7 @@ from slowapi.errors import RateLimitExceeded
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from config import settings
 from models import (
     Lead, Qualificazione, Corriere, Preventivo, Contratto, 
     Pagamento, Spedizione, ChiamataRetell, EmailInviata
@@ -41,6 +44,11 @@ from services.docusign_service import docusign_service
 from services.email_service import email_service
 from services.pdf_generator import pdf_generator
 
+# Mock services for DEMO_MODE
+from services.mock_clients import get_mock_hume, get_mock_insighto, get_mock_blockchain
+from services.mock_agents import get_agent_simulator
+from services.mock_revenue_generator import get_revenue_generator
+
 # Configure structlog for JSON logging
 structlog.configure(
     processors=[
@@ -50,6 +58,19 @@ structlog.configure(
 )
 logger = structlog.get_logger()
 
+# Initialize mock services if in DEMO_MODE
+mock_hume = None
+mock_insighto = None
+mock_blockchain = None
+agent_simulator = None
+revenue_generator = None
+
+if settings.DEMO_MODE:
+    logger.info("🎮 DEMO_MODE enabled - Using mock services")
+    mock_hume = get_mock_hume()
+    mock_insighto = get_mock_insighto()
+    mock_blockchain = get_mock_blockchain()
+
 # Initialize rate limiter
 limiter = Limiter(key_func=get_remote_address)
 
@@ -57,11 +78,48 @@ limiter = Limiter(key_func=get_remote_address)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager for startup/shutdown."""
-    logger.info("Starting AUTO-BROKER API", version="1.0.0", environment=os.getenv("ENVIRONMENT"))
+    logger.info(
+        "Starting AUTO-BROKER API", 
+        version="1.0.0", 
+        environment=os.getenv("ENVIRONMENT"),
+        demo_mode=settings.DEMO_MODE
+    )
     await init_db()
     await redis_service.connect()
+    
+    # Start demo simulators if in DEMO_MODE
+    if settings.DEMO_MODE:
+        global agent_simulator, revenue_generator
+        logger.info("🎮 Starting demo simulators...")
+        
+        # Auto-seed database if empty
+        from routers.demo import seed_demo_data
+        try:
+            async for db in get_db():
+                result = await seed_demo_data(db)
+                logger.info(f"🌱 Database seed: {result['status']}")
+                break
+        except Exception as e:
+            logger.warning(f"Auto-seed skipped: {e}")
+        
+        agent_simulator = get_agent_simulator()
+        revenue_generator = get_revenue_generator()
+        
+        await agent_simulator.start()
+        await revenue_generator.start()
+        
+        logger.info("✅ Demo simulators started")
+    
     yield
+    
+    # Shutdown
     logger.info("Shutting down AUTO-BROKER API")
+    
+    if settings.DEMO_MODE and agent_simulator:
+        await agent_simulator.stop()
+    if settings.DEMO_MODE and revenue_generator:
+        await revenue_generator.stop()
+    
     await redis_service.disconnect()
 
 
@@ -1138,6 +1196,12 @@ from routers.dashboard import router as dashboard_router
 app.include_router(dashboard_router)
 
 # ==========================================
+# DEMO ROUTES (Zero-Cost Testing)
+# ==========================================
+from routers.demo import router as demo_router
+app.include_router(demo_router)
+
+# ==========================================
 # LEGACY DASHBOARD STATS
 # ==========================================
 @app.get("/stats/dashboard", tags=["Dashboard"])
@@ -1184,6 +1248,108 @@ async def get_dashboard_stats(
     }
 
 
+# ==========================================
+# DEMO MODE ENDPOINTS
+# ==========================================
+@app.get("/demo/status", tags=["Demo"])
+async def get_demo_status():
+    """Get demo mode status and mock service stats"""
+    return {
+        "demo_mode": settings.DEMO_MODE,
+        "mock_services": {
+            "hume": mock_hume.call_count if mock_hume else 0,
+            "insighto": mock_insighto.call_count if mock_insighto else 0,
+            "blockchain": mock_blockchain.get_stats() if mock_blockchain else None
+        },
+        "revenue_generator": revenue_generator.get_stats() if revenue_generator else None,
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+
+@app.post("/demo/command/emergency-stop", tags=["Demo"])
+async def demo_emergency_stop(request: Request):
+    """Simulate emergency stop - no real action taken"""
+    await asyncio.sleep(1)
+    logger.info("🚨 [DEMO] Emergency stop simulated")
+    return {
+        "success": True,
+        "message": "Emergency stop simulated (Demo Mode)",
+        "action": "all_operations_halted",
+        "timestamp": datetime.utcnow().isoformat(),
+        "mock": True
+    }
+
+
+@app.post("/demo/command/change-carrier", tags=["Demo"])
+async def demo_change_carrier(
+    shipment_id: str,
+    new_carrier: str,
+    request: Request
+):
+    """Simulate carrier change - no real carrier contacted"""
+    await asyncio.sleep(0.5)
+    logger.info(f"🚚 [DEMO] Carrier change simulated: {shipment_id} -> {new_carrier}")
+    return {
+        "success": True,
+        "message": f"Carrier changed to {new_carrier} (Demo Mode)",
+        "shipment_id": shipment_id,
+        "new_carrier": new_carrier,
+        "previous_carrier": "Previous Carrier Srl",
+        "cost_delta": "+€25.00",
+        "mock": True
+    }
+
+
+@app.post("/demo/test/emotion-analysis", tags=["Demo"])
+async def demo_emotion_analysis(text: str):
+    """Test emotion analysis with mock Hume AI"""
+    if not settings.DEMO_MODE:
+        raise HTTPException(status_code=400, detail="Only available in DEMO_MODE")
+    
+    result = await mock_hume.analyze_conversation(text)
+    return result
+
+
+@app.post("/demo/test/make-call", tags=["Demo"])
+async def demo_make_call(phone: str, script: str = "Demo call"):
+    """Test phone call with mock Insighto"""
+    if not settings.DEMO_MODE:
+        raise HTTPException(status_code=400, detail="Only available in DEMO_MODE")
+    
+    result = await mock_insighto.make_call(phone, script)
+    return result
+
+
+@app.post("/demo/test/blockchain-tx", tags=["Demo"])
+async def demo_blockchain_tx(value_eth: float = 0.01):
+    """Test blockchain transaction with mock"""
+    if not settings.DEMO_MODE:
+        raise HTTPException(status_code=400, detail="Only available in DEMO_MODE")
+    
+    result = await mock_blockchain.send_transaction(
+        to=f"0x{uuid4().hex[:40]}",
+        value_eth=value_eth
+    )
+    return result
+
+
+@app.get("/demo/mock-data", tags=["Demo"])
+async def get_mock_data():
+    """Get current mock data (shipments, revenue, agents)"""
+    if not settings.DEMO_MODE:
+        raise HTTPException(status_code=400, detail="Only available in DEMO_MODE")
+    
+    return {
+        "revenue": revenue_generator.get_stats() if revenue_generator else None,
+        "active_tracking": list(revenue_generator.active_tracking.values()) if revenue_generator else [],
+        "blockchain_stats": mock_blockchain.get_stats() if mock_blockchain else None,
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+
+# ==========================================
+# MAIN ENTRY POINT
+# ==========================================
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
