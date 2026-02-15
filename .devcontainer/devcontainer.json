@@ -1,19 +1,52 @@
 {
-  "name": "Auto-Broker",
-  "image": "mcr.microsoft.com/devcontainers/typescript-node:20",
+  "name": "Auto-Broker Full Stack",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "app",
+  "workspaceFolder": "/workspaces/auto-broker",
   
-  "forwardPorts": [5173, 8000],
-  "portsAttributes": {
-    "5173": { "label": "Dashboard", "onAutoForward": "openBrowser" },
-    "8000": { "label": "API", "onAutoForward": "notify" }
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {}
   },
 
-  "postCreateCommand": "cd /workspaces/auto-broker/dashboard && npm install && npm run build 2>/dev/null || true",
-  "postStartCommand": "cd /workspaces/auto-broker/dashboard && npx vite preview --host 0.0.0.0 --port 5173 > /dev/null 2>&1 &",
+  "forwardPorts": [5173, 8000, 5432, 6379, 8080],
+  "portsAttributes": {
+    "5173": {
+      "label": "Dashboard React",
+      "onAutoForward": "openBrowser"
+    },
+    "8000": {
+      "label": "FastAPI Backend",
+      "onAutoForward": "notify"
+    },
+    "5432": {
+      "label": "PostgreSQL",
+      "onAutoForward": "silent"
+    },
+    "6379": {
+      "label": "Redis",
+      "onAutoForward": "silent"
+    }
+  },
+
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "postStartCommand": "bash .devcontainer/post-start.sh",
 
   "customizations": {
     "vscode": {
-      "extensions": ["bradlc.vscode-tailwindcss", "esbenp.prettier-vscode"]
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "bradlc.vscode-tailwindcss",
+        "esbenp.prettier-vscode",
+        "dbaeumer.vscode-eslint"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.linting.enabled": true,
+        "editor.formatOnSave": true
+      }
     }
-  }
+  },
+
+  "remoteUser": "vscode"
 }

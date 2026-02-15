@@ -93,7 +93,7 @@ async def lifespan(app: FastAPI):
         logger.info("🎮 Starting demo simulators...")
         
         # Auto-seed database if empty
-        from routers.demo import seed_demo_data
+        from utils.seeders import seed_demo_data
         try:
             async for db in get_db():
                 result = await seed_demo_data(db)
