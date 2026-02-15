@@ -1,31 +1,15 @@
 {
-  "name": "Auto-Broker Dev",
-  "image": "mcr.microsoft.com/devcontainers/python:3.11",
+  "name": "Auto-Broker",
+  "image": "mcr.microsoft.com/devcontainers/python:3.11-bullseye",
   
   "features": {
     "ghcr.io/devcontainers/features/node:1": {
-      "version": "20",
-      "nvmVersion": "0.40"
+      "version": "20"
     },
-    "ghcr.io/devcontainers/features/docker-in-docker:2": {
-      "version": "latest",
-      "moby": true
-    },
-    "ghcr.io/devcontainers/features/github-cli:1": {},
-    "ghcr.io/devcontainers/features/common-utils:2": {
-      "installZsh": true,
-      "configureZshAsDefaultShell": true,
-      "installOhMyZsh": true
-    }
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
   },
 
-  "hostRequirements": {
-    "cpus": 4,
-    "memory": "8gb",
-    "storage": "32gb"
-  },
-
-  "forwardPorts": [5173, 8000, 5432, 6379, 5678],
+  "forwardPorts": [5173, 8000, 5432, 6379],
   "portsAttributes": {
     "5173": {
       "label": "Dashboard",
@@ -34,46 +18,21 @@
     "8000": {
       "label": "API",
       "onAutoForward": "notify"
-    },
-    "5432": {
-      "label": "PostgreSQL",
-      "onAutoForward": "silent"
-    },
-    "6379": {
-      "label": "Redis",
-      "onAutoForward": "silent"
-    },
-    "5678": {
-      "label": "n8n",
-      "onAutoForward": "notify"
     }
   },
 
-  "postCreateCommand": "bash /workspace/.devcontainer/post-create.sh",
-  "postStartCommand": "bash /workspace/.devcontainer/post-start.sh",
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "postStartCommand": "bash .devcontainer/start.sh",
 
   "customizations": {
     "vscode": {
       "extensions": [
         "ms-python.python",
-        "ms-python.vscode-pylance",
-        "ms-python.black-formatter",
         "bradlc.vscode-tailwindcss",
-        "esbenp.prettier-vscode",
-        "dbaeumer.vscode-eslint"
-      ],
-      "settings": {
-        "python.defaultInterpreterPath": "/usr/local/bin/python",
-        "python.linting.enabled": true,
-        "editor.formatOnSave": true,
-        "terminal.integrated.defaultProfile.linux": "zsh"
-      }
+        "esbenp.prettier-vscode"
+      ]
     }
   },
 
-  "remoteUser": "vscode",
-  "workspaceFolder": "/workspace",
-  "mounts": [
-    "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached"
-  ]
+  "remoteUser": "vscode"
 }
