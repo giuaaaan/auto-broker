@@ -1,0 +1,13 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: auto-broker-api
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-staging"
+spec:
+  tls:
+    - hosts:
+        - api-staging.auto-broker.com
+      secretName: auto-broker-tls-staging
+  rules:
+    - host: api-staging.auto-broker.com

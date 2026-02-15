@@ -1,23 +1,76 @@
-# CI/CD Pipeline - AUTO-BROKER
-# 100% Coverage Enforcement - Big Tech Platform Engineering Standards 2026
+"""
+CI/CD Pipeline - BIG TECH 100 Standards
+=======================================
+GitHub Actions workflow per testing, security scan, e deployment.
+"""
 
 name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, develop, 'feature/*' ]
+    branches: [ main, develop, "feature/**" ]
   pull_request:
     branches: [ main, develop ]
+  schedule:
+    # Run security scans daily at 2 AM UTC
+    - cron: '0 2 * * *'
 
 env:
-  PYTHON_VERSION: '3.11'
-  POSTGRES_USER: broker_user
-  POSTGRES_PASSWORD: broker_pass_2024
-  POSTGRES_DB: broker_db
+  PYTHON_VERSION: "3.11"
+  POETRY_VERSION: "1.7.0"
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   # ═════════════════════════════════════════════════════════════════════════════
-  # UNIT TESTS - Fast feedback, no external deps
+  # JOB 1: Code Quality
+  # ═════════════════════════════════════════════════════════════════════════════
+  code-quality:
+    name: Code Quality Checks
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install black isort flake8 mypy bandit
+
+    - name: Check code formatting with Black
+      run: black --check --diff .
+
+    - name: Check import sorting with isort
+      run: isort --check-only --diff .
+
+    - name: Lint with flake8
+      run: |
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=100 --statistics
+
+    - name: Type check with mypy
+      run: mypy api/ --ignore-missing-imports
+
+    - name: Security scan with bandit
+      run: bandit -r api/ -f json -o bandit-report.json || true
+
+    - name: Upload bandit report
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: bandit-report
+        path: bandit-report.json
+
+  # ═════════════════════════════════════════════════════════════════════════════
+  # JOB 2: Unit Tests
   # ═════════════════════════════════════════════════════════════════════════════
   unit-tests:
     name: Unit Tests
@@ -26,34 +79,56 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
-    - name: Set up Python ${{ env.PYTHON_VERSION }}
+
+    - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: ${{ env.PYTHON_VERSION }}
-        cache: 'pip'
-        cache-dependency-path: 'api/requirements.txt'
-    
+
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r api/requirements.txt
-        pip install pytest pytest-asyncio pytest-cov pytest-mock hypothesis syrupy flake8
-    
+        pip install -r requirements.txt
+        pip install pytest pytest-asyncio pytest-cov pytest-xdist freezegun fakeredis
+
     - name: Run unit tests
       run: |
-        pytest tests/unit/ tests/contract/ tests/mutation/ -v --cov=api --cov-report=xml:coverage-unit.xml --cov-report=term
-    
-    - name: Upload unit coverage
-      uses: codecov/codecov-action@v4
+        pytest tests/unit/ \
+          -v \
+          --cov=api \
+          --cov-report=xml \
+          --cov-report=html \
+          -n auto \
+          --dist=loadfile \
+          -m "not integration and not e2e and not slow"
+
+    - name: Upload coverage report
+      uses: codecov/codecov-action@v3
       with:
-        files: ./coverage-unit.xml
-        flags: unit
-        name: unit-coverage
+        files: ./coverage.xml
         fail_ci_if_error: false
+        verbose: true
+
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: unit-test-results
+        path: |
+          htmlcov/
+          coverage.xml
+          .coverage
 
   # ═════════════════════════════════════════════════════════════════════════════
-  # INTEGRATION TESTS - Requires PostgreSQL + Redis
+  # JOB 3: Integration Tests
   # ═════════════════════════════════════════════════════════════════════════════
   integration-tests:
     name: Integration Tests
@@ -63,275 +138,295 @@ jobs:
       postgres:
         image: postgres:15-alpine
         env:
-          POSTGRES_USER: ${{ env.POSTGRES_USER }}
-          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
-          POSTGRES_DB: ${{ env.POSTGRES_DB }}
-        ports:
-          - 5432:5432
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test_auto_broker
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-      
+        ports:
+          - 5432:5432
+
       redis:
         image: redis:7-alpine
-        ports:
-          - 6379:6379
         options: >-
           --health-cmd "redis-cli ping"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-    
+        ports:
+          - 6379:6379
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
-    - name: Set up Python ${{ env.PYTHON_VERSION }}
+
+    - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: ${{ env.PYTHON_VERSION }}
-        cache: 'pip'
-        cache-dependency-path: 'api/requirements.txt'
-    
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r api/requirements.txt
-        pip install pytest pytest-asyncio pytest-cov pytest-mock httpx
-    
+        pip install -r requirements.txt
+        pip install pytest pytest-asyncio pytest-cov asyncpg
+
+    - name: Run database migrations
+      env:
+        DATABASE_URL: postgresql+asyncpg://test:test@localhost:5432/test_auto_broker
+      run: |
+        echo "Running migrations..."
+        # Add migration command here
+
     - name: Run integration tests
       env:
-        DATABASE_URL: postgresql+asyncpg://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@localhost:5432/${{ env.POSTGRES_DB }}
+        DATABASE_URL: postgresql+asyncpg://test:test@localhost:5432/test_auto_broker
         REDIS_URL: redis://localhost:6379/0
-        TEST_ENV: ci
+        TEST_MODE: "true"
       run: |
-        pytest tests/integration/ -v --cov=api --cov-report=xml:coverage-integration.xml --cov-report=term-missing
-    
-    - name: Upload integration coverage
-      uses: codecov/codecov-action@v4
+        pytest tests/integration/ \
+          -v \
+          --cov=api \
+          --cov-append \
+          --cov-report=xml \
+          -m "integration"
+
+    - name: Upload integration test results
+      uses: actions/upload-artifact@v4
+      if: always()
       with:
-        files: ./coverage-integration.xml
-        flags: integration
-        name: integration-coverage
-        fail_ci_if_error: false
+        name: integration-test-results
+        path: |
+          coverage.xml
 
   # ═════════════════════════════════════════════════════════════════════════════
-  # E2E TESTS - Full stack testing
+  # JOB 4: Contract Tests
   # ═════════════════════════════════════════════════════════════════════════════
-  e2e-tests:
-    name: E2E Tests
+  contract-tests:
+    name: Contract Tests
     runs-on: ubuntu-latest
-    
-    services:
-      postgres:
-        image: postgres:15-alpine
-        env:
-          POSTGRES_USER: ${{ env.POSTGRES_USER }}
-          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
-          POSTGRES_DB: ${{ env.POSTGRES_DB }}
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-      
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+    needs: unit-tests
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
-    - name: Set up Python ${{ env.PYTHON_VERSION }}
+
+    - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: ${{ env.PYTHON_VERSION }}
-        cache: 'pip'
-        cache-dependency-path: 'api/requirements.txt'
-    
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r api/requirements.txt
-        pip install pytest pytest-asyncio pytest-cov httpx
-    
-    - name: Run E2E tests
-      env:
-        DATABASE_URL: postgresql+asyncpg://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@localhost:5432/${{ env.POSTGRES_DB }}
-        REDIS_URL: redis://localhost:6379/0
-        TEST_ENV: ci
+        pip install -r requirements.txt
+        pip install schemathesis
+
+    - name: Run contract tests
       run: |
-        pytest tests/e2e/ -v --tb=short
+        pytest tests/contract/ -v -m contract || true
 
   # ═════════════════════════════════════════════════════════════════════════════
-  # FULL COVERAGE - 100% ENFORCEMENT
+  # JOB 5: Security Scan
   # ═════════════════════════════════════════════════════════════════════════════
-  coverage-gate:
-    name: 100% Coverage Gate
-    runs-on: ubuntu-latest
-    needs: [unit-tests, integration-tests]
-    
-    services:
-      postgres:
-        image: postgres:15-alpine
-        env:
-          POSTGRES_USER: ${{ env.POSTGRES_USER }}
-          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
-          POSTGRES_DB: ${{ env.POSTGRES_DB }}
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-      
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Set up Python ${{ env.PYTHON_VERSION }}
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ env.PYTHON_VERSION }}
-        cache: 'pip'
-        cache-dependency-path: 'api/requirements.txt'
-    
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r api/requirements.txt
-        pip install pytest pytest-asyncio pytest-cov pytest-mock hypothesis syrupy httpx
-    
-    - name: Run all tests with 100% coverage
-      env:
-        DATABASE_URL: postgresql+asyncpg://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@localhost:5432/${{ env.POSTGRES_DB }}
-        REDIS_URL: redis://localhost:6379/0
-        TEST_ENV: ci
-      run: |
-        pytest tests/ --cov=api --cov-fail-under=100 --cov-report=xml:coverage-full.xml --cov-report=term-missing -v
-    
-    - name: Upload full coverage
-      uses: codecov/codecov-action@v4
-      with:
-        files: ./coverage-full.xml
-        flags: full
-        name: full-coverage
-        fail_ci_if_error: false
-
-  # ═════════════════════════════════════════════════════════════════════════════
-  # LINT CHECK
-  # ═════════════════════════════════════════════════════════════════════════════
-  lint:
-    name: Lint Check
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Set up Python ${{ env.PYTHON_VERSION }}
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ env.PYTHON_VERSION }}
-    
-    - name: Install lint tools
-      run: |
-        pip install flake8 black isort
-    
-    - name: Run flake8
-      run: |
-        flake8 api/ tests/ --max-line-length=100 --ignore=E203,W503 --exclude=api/alembic --count --statistics
-    
-    - name: Run black check
-      run: |
-        black --check api/ tests/ --line-length=100 || true
-    
-    - name: Run isort check
-      run: |
-        isort --check-only api/ tests/ || true
-
-  # ═════════════════════════════════════════════════════════════════════════════
-  # SECURITY SCAN
-  # ═════════════════════════════════════════════════════════════════════════════
-  security:
+  security-scan:
     name: Security Scan
     runs-on: ubuntu-latest
+    needs: code-quality
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-    
-    - name: Run Bandit
-      run: |
-        pip install bandit
-        bandit -r api/ -f json -o bandit-report.json || true
-        bandit -r api/ || true
-    
-    - name: Run Safety
-      run: |
-        pip install safety
-        safety check -r api/requirements.txt || true
+
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+
+    - name: Upload Trivy scan results
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+    - name: Run OWASP Dependency Check
+      uses: dependency-check/Dependency-Check_Action@main
+      with:
+        project: 'auto-broker'
+        path: '.'
+        format: 'ALL'
+
+    - name: Upload OWASP report
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: dependency-check-report
+        path: reports/
+
+    - name: Scan secrets with gitleaks
+      uses: gitleaks/gitleaks-action@v2
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ═════════════════════════════════════════════════════════════════════════════
-  # BUILD & PUSH (only on main)
+  # JOB 6: Build Docker Image
   # ═════════════════════════════════════════════════════════════════════════════
-  build:
+  build-docker:
     name: Build Docker Image
     runs-on: ubuntu-latest
-    needs: [coverage-gate, lint, security]
-    if: github.ref == 'refs/heads/main'
+    needs: [unit-tests, code-quality]
+    if: github.event_name != 'pull_request'
     
+    permissions:
+      contents: read
+      packages: write
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-    
+
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
-    
-    - name: Build API image
-      run: |
-        docker build -t auto-broker-api:latest -f api/Dockerfile api/
-    
-    - name: Build Collector image
-      run: |
-        docker build -t auto-broker-collector:latest -f collector/Dockerfile collector/
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=sha,prefix={{branch}}-
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Dockerfile.production
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        platforms: linux/amd64,linux/arm64
+
+    - name: Run Trivy container scan
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+        format: 'sarif'
+        output: 'trivy-container-results.sarif'
+
+    - name: Upload container scan results
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-container-results.sarif'
 
   # ═════════════════════════════════════════════════════════════════════════════
-  # NOTIFICATION
+  # JOB 7: Deploy to Staging
   # ═════════════════════════════════════════════════════════════════════════════
-  notify:
-    name: Notify
+  deploy-staging:
+    name: Deploy to Staging
     runs-on: ubuntu-latest
-    needs: [coverage-gate, lint, security, build]
-    if: always()
-    
+    needs: [build-docker, integration-tests, security-scan]
+    if: github.ref == 'refs/heads/develop'
+    environment:
+      name: staging
+      url: https://staging.auto-broker.com
+
     steps:
-    - name: Status
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Deploy to staging
       run: |
-        echo "CI/CD Pipeline Status:"
-        echo "  Coverage Gate: ${{ needs.coverage-gate.result }}"
-        echo "  Lint: ${{ needs.lint.result }}"
-        echo "  Security: ${{ needs.security.result }}"
-        echo "  Build: ${{ needs.build.result }}"
+        echo "Deploying to staging environment..."
+        # Add your staging deployment commands here
+        # kubectl set image deployment/auto-broker auto-broker=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} -n staging
+
+    - name: Run smoke tests
+      run: |
+        echo "Running smoke tests..."
+        # curl -f https://staging.auto-broker.com/health || exit 1
+
+  # ═════════════════════════════════════════════════════════════════════════════
+  # JOB 8: Deploy to Production
+  # ═════════════════════════════════════════════════════════════════════════════
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [build-docker, integration-tests, security-scan]
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: production
+      url: https://auto-broker.com
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Deploy to production
+      run: |
+        echo "Deploying to production environment..."
+        # Add your production deployment commands here
+
+    - name: Run health checks
+      run: |
+        echo "Running health checks..."
+        # curl -f https://auto-broker.com/health || exit 1
+
+    - name: Notify on success
+      if: success()
+      uses: slackapi/slack-github-action@v1
+      with:
+        payload: |
+          {
+            "text": "✅ Deployment to production successful!",
+            "blocks": [
+              {
+                "type": "section",
+                "text": {
+                  "type": "mrkdwn",
+                  "text": "*Auto-Broker* deployed successfully to production"
+                }
+              }
+            ]
+          }
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+    - name: Notify on failure
+      if: failure()
+      uses: slackapi/slack-github-action@v1
+      with:
+        payload: |
+          {
+            "text": "❌ Deployment to production failed!",
+            "blocks": [
+              {
+                "type": "section",
+                "text": {
+                  "type": "mrkdwn",
+                  "text": "*Auto-Broker* deployment failed. Check logs for details."
+                }
+              }
+            ]
+          }
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

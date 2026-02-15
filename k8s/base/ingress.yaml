@@ -1,0 +1,70 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: auto-broker-api
+  namespace: auto-broker
+  labels:
+    app.kubernetes.io/name: auto-broker
+    app.kubernetes.io/component: ingress
+  annotations:
+    # NGINX Ingress Controller
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "120"
+    
+    # Rate limiting
+    nginx.ingress.kubernetes.io/limit-rps: "10"
+    nginx.ingress.kubernetes.io/limit-connections: "5"
+    
+    # CORS
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "https://app.auto-broker.com"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "Authorization, Content-Type, X-Request-ID"
+    
+    # Cert Manager
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    
+    # External DNS
+    external-dns.alpha.kubernetes.io/hostname: api.auto-broker.com
+    
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - api.auto-broker.com
+      secretName: auto-broker-tls
+  rules:
+    - host: api.auto-broker.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: auto-broker-api
+                port:
+                  number: 80
+---
+# Alternative: Istio Gateway (if using Istio)
+# apiVersion: networking.istio.io/v1beta1
+# kind: Gateway
+# metadata:
+#   name: auto-broker-gateway
+#   namespace: auto-broker
+# spec:
+#   selector:
+#     istio: ingressgateway
+#   servers:
+#     - port:
+#         number: 443
+#         name: https
+#         protocol: HTTPS
+#       tls:
+#         mode: SIMPLE
+#         credentialName: auto-broker-tls
+#       hosts:
+#         - api.auto-broker.com

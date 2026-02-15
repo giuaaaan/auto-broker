@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auto-broker-api
+spec:
+  replicas: 5
+  strategy:
+    rollingUpdate:
+      maxSurge: 2
+      maxUnavailable: 1
+  template:
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/component: api
+              topologyKey: kubernetes.io/hostname
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: node-type
+                    operator: In
+                    values:
+                      - production
+      tolerations:
+        - key: dedicated
+          operator: Equal
+          value: production
+          effect: NoSchedule
+      containers:
+        - name: api
+          resources:
+            requests:
+              cpu: 1000m
+              memory: 1Gi
+            limits:
+              cpu: 4000m
+              memory: 4Gi
+          env:
+            - name: WORKERS
+              value: "8"

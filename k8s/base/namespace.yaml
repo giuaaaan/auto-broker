@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: auto-broker
+  labels:
+    app.kubernetes.io/name: auto-broker
+    app.kubernetes.io/component: namespace
+    environment: production
+  annotations:
+    description: "Auto-Broker Platform Production Namespace"

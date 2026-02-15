@@ -1,0 +1,437 @@
+# =============================================================================
+# Production Docker Compose - BIG TECH 100 Standards
+# Complete production stack with high availability
+# =============================================================================
+
+version: "3.9"
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Common Configuration
+# ═════════════════════════════════════════════════════════════════════════════
+
+x-common-variables: &common-variables
+  TZ: Europe/Rome
+  PYTHONDONTWRITEBYTECODE: "1"
+  PYTHONUNBUFFERED: "1"
+
+x-common-deploy: &common-deploy
+  resources:
+    limits:
+      cpus: '2.0'
+      memory: 2G
+    reservations:
+      cpus: '0.5'
+      memory: 512M
+  restart_policy:
+    condition: on-failure
+    delay: 5s
+    max_attempts: 3
+    window: 120s
+
+x-common-logging: &common-logging
+  driver: "json-file"
+  options:
+    max-size: "100m"
+    max-file: "5"
+    labels: "service_name,environment"
+    env: "OS_VERSION"
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Services
+# ═════════════════════════════════════════════════════════════════════════════
+
+services:
+  # ───────────────────────────────────────────────────────────────────────────
+  # API Application
+  # ───────────────────────────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+      target: production
+    image: auto-broker/api:${VERSION:-latest}
+    container_name: auto-broker-api
+    hostname: api
+    environment:
+      <<: *common-variables
+      # Application
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_SECRET_KEY: ${APP_SECRET_KEY}
+      APP_VERSION: ${VERSION:-2.0.0}
+      
+      # Database
+      DATABASE_URL: postgresql+asyncpg://auto_broker:${DB_PASSWORD}@postgres:5432/auto_broker
+      DB_POOL_SIZE: "20"
+      DB_MAX_OVERFLOW: "30"
+      
+      # Redis
+      REDIS_URL: redis://redis:6379/0
+      REDIS_CLUSTER: "false"
+      
+      # Cache
+      CACHE_TTL: "300"
+      CACHE_PREFIX: "auto-broker"
+      
+      # Security
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ALGORITHM: HS256
+      JWT_EXPIRATION: "3600"
+      
+      # External APIs
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY}
+      
+      # Monitoring
+      METRICS_ENABLED: "true"
+      LOG_LEVEL: INFO
+      LOG_FORMAT: json
+      
+      # Workers
+      WORKERS: "4"
+      TIMEOUT: "120"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./logs:/app/logs:rw
+      - /etc/localtime:/etc/localtime:ro
+    networks:
+      - auto-broker-network
+    deploy:
+      <<: *common-deploy
+      replicas: 3
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+        order: start-first
+      rollback_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: pause
+        monitor: 60s
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging: *common-logging
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrations:
+        condition: service_completed_successfully
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Background Workers (Celery)
+  # ───────────────────────────────────────────────────────────────────────────
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+      target: production
+    image: auto-broker/worker:${VERSION:-latest}
+    container_name: auto-broker-worker
+    hostname: worker
+    command: celery -A api.core.celery worker -l info -c 4 -Q default,scraping,pricing,notifications
+    environment:
+      <<: *common-variables
+      APP_ENV: production
+      DATABASE_URL: postgresql+asyncpg://auto_broker:${DB_PASSWORD}@postgres:5432/auto_broker
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      LOG_LEVEL: INFO
+    volumes:
+      - ./logs:/app/logs:rw
+      - /etc/localtime:/etc/localtime:ro
+    networks:
+      - auto-broker-network
+    deploy:
+      <<: *common-deploy
+      replicas: 2
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A api.core.celery inspect ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging: *common-logging
+    depends_on:
+      - redis
+      - postgres
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Celery Beat (Scheduler)
+  # ───────────────────────────────────────────────────────────────────────────
+  beat:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+      target: production
+    image: auto-broker/beat:${VERSION:-latest}
+    container_name: auto-broker-beat
+    hostname: beat
+    command: celery -A api.core.celery beat -l info --scheduler celery.beat.PersistentScheduler
+    environment:
+      <<: *common-variables
+      APP_ENV: production
+      DATABASE_URL: postgresql+asyncpg://auto_broker:${DB_PASSWORD}@postgres:5432/auto_broker
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      LOG_LEVEL: INFO
+    volumes:
+      - ./logs:/app/logs:rw
+      - celery-beat-data:/app/celerybeat-schedule:rw
+      - /etc/localtime:/etc/localtime:ro
+    networks:
+      - auto-broker-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+      restart_policy:
+        condition: on-failure
+    logging: *common-logging
+    depends_on:
+      - redis
+      - postgres
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Database Migrations
+  # ───────────────────────────────────────────────────────────────────────────
+  migrations:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+      target: production
+    image: auto-broker/migrations:${VERSION:-latest}
+    container_name: auto-broker-migrations
+    command: alembic upgrade head
+    environment:
+      <<: *common-variables
+      DATABASE_URL: postgresql+asyncpg://auto_broker:${DB_PASSWORD}@postgres:5432/auto_broker
+    networks:
+      - auto-broker-network
+    deploy:
+      restart_policy:
+        condition: none
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # PostgreSQL Database
+  # ───────────────────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: auto-broker-postgres
+    hostname: postgres
+    environment:
+      <<: *common-variables
+      POSTGRES_USER: auto_broker
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: auto_broker
+      PGDATA: /var/lib/postgresql/data/pgdata
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=en_US.UTF-8"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data:rw
+      - ./init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - ./backups:/backups:rw
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - "127.0.0.1:5432:5432"
+    networks:
+      - auto-broker-network
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 2G
+      restart_policy:
+        condition: on-failure
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U auto_broker -d auto_broker"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging: *common-logging
+    command: >
+      postgres
+      -c max_connections=200
+      -c shared_buffers=1GB
+      -c effective_cache_size=3GB
+      -c maintenance_work_mem=256MB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+      -c default_statistics_target=100
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
+      -c work_mem=5242kB
+      -c min_wal_size=1GB
+      -c max_wal_size=4GB
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Redis Cache & Queue
+  # ───────────────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: auto-broker-redis
+    hostname: redis
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 1gb
+      --maxmemory-policy allkeys-lru
+      --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis-data:/data:rw
+      - ./config/redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - "127.0.0.1:6379:6379"
+    networks:
+      - auto-broker-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+      restart_policy:
+        condition: on-failure
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging: *common-logging
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # NGINX Load Balancer / Reverse Proxy
+  # ───────────────────────────────────────────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: auto-broker-nginx
+    hostname: nginx
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./logs/nginx:/var/log/nginx:rw
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - auto-broker-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+      restart_policy:
+        condition: on-failure
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging: *common-logging
+    depends_on:
+      - api
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Prometheus Metrics Collector
+  # ───────────────────────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: auto-broker-prometheus
+    hostname: prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus:rw
+    ports:
+      - "127.0.0.1:9090:9090"
+    networks:
+      - auto-broker-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+    logging: *common-logging
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Grafana Dashboards
+  # ───────────────────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:latest
+    container_name: auto-broker-grafana
+    hostname: grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=https://grafana.auto-broker.com
+    volumes:
+      - grafana-data:/var/lib/grafana:rw
+      - ./config/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./config/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    ports:
+      - "127.0.0.1:3000:3000"
+    networks:
+      - auto-broker-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    logging: *common-logging
+    depends_on:
+      - prometheus
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Networks
+# ═════════════════════════════════════════════════════════════════════════════
+
+networks:
+  auto-broker-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Volumes
+# ═════════════════════════════════════════════════════════════════════════════
+
+volumes:
+  postgres-data:
+    driver: local
+  redis-data:
+    driver: local
+  celery-beat-data:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
