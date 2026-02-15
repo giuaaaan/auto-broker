@@ -407,19 +407,14 @@ auto-broker/
 ├── .coveragerc                      # Coverage settings
 │
 ├── config/                          # Configuration files
-│   └── postgresql.oracle.conf       # Tuned for 4GB RAM
 │
 ├── dashboard/                       # React Dashboard
 │   ├── Dockerfile.optimized         # Multi-stage build
 │   └── nginx/                       # Nginx configs
 │
-├── nginx/                           # Reverse proxy configs
-│   ├── oracle-nginx.conf            # Main proxy config
-│   └── nginx.conf                   # Base nginx config
+
 │
 ├── scripts/                         # Automation scripts
-│   ├── deploy-oracle-enterprise.sh  # One-command deploy
-│   └── backup-oracle.sh             # Backup automation
 │
 ├── api/                             # FastAPI Application
 │   ├── Dockerfile
@@ -566,36 +561,7 @@ cp .env.oracle.example .env.oracle
 - ✅ **One-command deploy** script
 - ✅ **DEMO_MODE** - Zero cost testing
 
-### 🤖 Agent Tools - Big Tech Style (2026)
 
-Controllo browser autonomo come **OpenAI Operator**, **Anthropic Computer Use**, **Google Project Mariner**.
-
-```bash
-# Installa
-./agent-tools/setup.sh
-
-# Avvia MCP Server
-python agent-tools/mcp_server/server.py --http
-
-# Usa in Python
-from agent-tools.browser_agent import SimpleBrowser
-
-async with SimpleBrowser() as browser:
-    await browser.goto("https://cloud.oracle.com")
-    await browser.click("Sign In")
-    screenshot = await browser.screenshot()
-```
-
-**Features:**
-- 🌐 Vision-based browser control
-- 🛡️ Anti-detection stealth
-- 📸 Screenshot at every step
-- 🔌 MCP Protocol standard
-- 🤖 Oracle Cloud automation ready
-
-📖 **[Agent Tools Guide](agent-tools/README.md)**
-
----
 
 ## 📄 License
 
