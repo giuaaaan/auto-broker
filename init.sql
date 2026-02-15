@@ -5,6 +5,9 @@
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- Enable Vector extension for ChromaDB
+CREATE EXTENSION IF NOT EXISTS "vector";
+
 -- ==========================================
 -- LEADS TABLE
 -- ==========================================

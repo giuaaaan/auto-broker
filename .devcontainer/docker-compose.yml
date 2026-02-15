@@ -11,24 +11,102 @@ services:
     network_mode: service:db
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@localhost:5432/autobroker
-      - REDIS_URL=redis://localhost:6379
+      - REDIS_URL=redis://localhost:6379/0
+      - VAULT_ADDR=http://localhost:8200
+      - VAULT_TOKEN=dev-token
+      - CHROMA_HOST=localhost
+      - CHROMA_PORT=8001
+      - OLLAMA_HOST=http://localhost:11434
       - DEMO_MODE=true
       - ENV=development
       - DEBUG=true
+      - LOG_LEVEL=DEBUG
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      vault:
+        condition: service_healthy
+      chroma:
+        condition: service_healthy
+      ollama:
+        condition: service_started
 
   db:
     image: postgres:15-alpine
     restart: unless-stopped
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      - ../init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: autobroker
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  vault:
+    image: hashicorp/vault:latest
+    restart: unless-stopped
+    cap_add:
+      - IPC_LOCK
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: dev-token
+      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+    healthcheck:
+      test: ["CMD", "vault", "status"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    volumes:
+      - vault-data:/vault/data
+
+  chroma:
+    image: chromadb/chroma:0.5.5
+    restart: unless-stopped
+    ports:
+      - "8001:8000"
+    environment:
+      - ALLOW_RESET=true
+      - ANONYMIZED_TELEMETRY=false
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    volumes:
+      - chroma-data:/chroma/chroma
+
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    environment:
+      - OLLAMA_ORIGINS=*
+    volumes:
+      - ollama-data:/root/.ollama
+    command: >
+      sh -c "ollama serve &
+             sleep 10 &&
+             ollama pull llama3.2:3b &&
+             wait"
 
 volumes:
   postgres-data:
+  vault-data:
+  chroma-data:
+  ollama-data:
