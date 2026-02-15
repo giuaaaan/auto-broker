@@ -1,0 +1,141 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: auto-broker-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-broker_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-broker_pass_2024}
+      POSTGRES_DB: ${POSTGRES_DB:-broker_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-broker_user} -d ${POSTGRES_DB:-broker_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - auto-broker-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: auto-broker-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - auto-broker-network
+
+  chroma:
+    image: chromadb/chroma:0.5.5
+    container_name: auto-broker-chroma
+    restart: unless-stopped
+    ports:
+      - "8001:8000"
+    environment:
+      - ALLOW_RESET=true
+      - ANONYMIZED_TELEMETRY=false
+    volumes:
+      - chroma_data:/chroma/chroma
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - auto-broker-network
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: auto-broker-n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_USER:-admin}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD:-admin123}
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - NODE_ENV=production
+      - WEBHOOK_URL=${WEBHOOK_URL:-http://localhost:5678/}
+      - GENERIC_TIMEZONE=${GENERIC_TIMEZONE:-Europe/Rome}
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=${POSTGRES_DB:-broker_db}
+      - DB_POSTGRESDB_USER=${POSTGRES_USER:-broker_user}
+      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD:-broker_pass_2024}
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n-workflows:/home/node/n8n-workflows:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - auto-broker-network
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: auto-broker-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    environment:
+      - OLLAMA_ORIGINS=*
+    volumes:
+      - ollama_models:/root/.ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - auto-broker-network
+
+  devcontainer:
+    image: mcr.microsoft.com/devcontainers/python:3.11
+    container_name: auto-broker-devcontainer
+    volumes:
+      - ..:/workspace:cached
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: sleep infinity
+    environment:
+      - DATABASE_URL=postgresql://broker_user:broker_pass_2024@postgres:5432/broker_db
+      - REDIS_URL=redis://redis:6379
+      - ENVIRONMENT=development
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - auto-broker-network
+    # Required for ptrace-based debuggers like C++, Go, and Rust
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - seccomp:unconfined
+
+volumes:
+  postgres_data:
+  redis_data:
+  n8n_data:
+  chroma_data:
+  ollama_models:
+
+networks:
+  auto-broker-network:
+    driver: bridge
