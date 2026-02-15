@@ -1,16 +1,19 @@
 {
   "name": "Auto-Broker",
-  "image": "mcr.microsoft.com/devcontainers/python:3.11",
-  "features": {
-    "ghcr.io/devcontainers/features/node:1": { "version": "20" }
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:20",
+  
+  "forwardPorts": [5173, 8000],
+  "portsAttributes": {
+    "5173": { "label": "Dashboard", "onAutoForward": "openBrowser" },
+    "8000": { "label": "API", "onAutoForward": "notify" }
   },
-  "forwardPorts": [5173, 8000, 5432, 6379],
-  "updateContentCommand": "cd /workspaces/auto-broker/dashboard && npm install",
-  "postCreateCommand": "cd /workspaces/auto-broker/api && pip install -r requirements.txt 2>/dev/null || pip install fastapi uvicorn sqlalchemy psycopg2-binary redis python-jose python-multipart passlib pydantic-settings python-socketio; cd /workspaces/auto-broker/dashboard && echo 'VITE_API_URL=http://localhost:8000' > .env && echo 'VITE_WS_URL=ws://localhost:8000' >> .env",
-  "postStartCommand": "cd /workspaces/auto-broker/api && nohup python main.py > /tmp/api.log 2>&1 &; cd /workspaces/auto-broker/dashboard && nohup npm run dev > /tmp/dashboard.log 2>&1 &",
+
+  "postCreateCommand": "cd /workspaces/auto-broker/dashboard && npm install && npm run build 2>/dev/null || true",
+  "postStartCommand": "cd /workspaces/auto-broker/dashboard && npx vite preview --host 0.0.0.0 --port 5173 > /dev/null 2>&1 &",
+
   "customizations": {
     "vscode": {
-      "extensions": ["ms-python.python", "bradlc.vscode-tailwindcss"]
+      "extensions": ["bradlc.vscode-tailwindcss", "esbenp.prettier-vscode"]
     }
   }
 }
