@@ -2,9 +2,11 @@
   "name": "Auto-Broker",
   "image": "mcr.microsoft.com/devcontainers/python:3.11",
   "features": {
-    "ghcr.io/devcontainers/features/node:1": { "version": "20" }
+    "ghcr.io/devcontainers/features/node:1": { "version": "20" },
+    "ghcr.io/devcontainers/features/sshd:1": { "version": "latest" }
   },
-  "forwardPorts": [5173, 8000],
+  "forwardPorts": [5173, 8000, 5432, 6379],
+  "postCreateCommand": "cd /workspaces/auto-broker/api && pip install -r requirements.txt 2>/dev/null || pip install fastapi uvicorn sqlalchemy psycopg2-binary redis python-jose[cryptography] python-multipart passlib[bcrypt] pydantic-settings python-socketio requests aiohttp beautifulsoup4; cd /workspaces/auto-broker/dashboard && npm ci; echo 'VITE_API_URL=http://localhost:8000' > .env && echo 'VITE_WS_URL=ws://localhost:8000' >> .env; cd /workspaces/auto-broker/api && python main.py &; cd /workspaces/auto-broker/dashboard && npm run dev &",
   "customizations": {
     "vscode": {
       "extensions": ["ms-python.python", "bradlc.vscode-tailwindcss"]
