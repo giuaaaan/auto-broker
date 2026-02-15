@@ -1,43 +1,39 @@
 {
-  "name": "Auto-Broker Development",
-  "dockerComposeFile": "../docker-compose.codespaces.yml",
-  "service": "devcontainer",
-  "workspaceFolder": "/workspace",
+  "name": "Auto-Broker Dev",
+  "image": "mcr.microsoft.com/devcontainers/python:3.11",
+  
   "features": {
     "ghcr.io/devcontainers/features/node:1": {
-      "version": "20"
+      "version": "20",
+      "nvmVersion": "0.40"
     },
-    "ghcr.io/devcontainers/features/python:1": {
-      "version": "3.11"
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "version": "latest",
+      "moby": true
     },
-    "ghcr.io/devcontainers/features/git:1": {},
-    "ghcr.io/devcontainers/features/github-cli:1": {}
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": true,
+      "configureZshAsDefaultShell": true,
+      "installOhMyZsh": true
+    }
   },
-  "forwardPorts": [
-    5173,
-    8000,
-    5678,
-    8001,
-    5432,
-    6379,
-    11434
-  ],
+
+  "hostRequirements": {
+    "cpus": 4,
+    "memory": "8gb",
+    "storage": "32gb"
+  },
+
+  "forwardPorts": [5173, 8000, 5432, 6379, 5678],
   "portsAttributes": {
     "5173": {
-      "label": "Dashboard React",
+      "label": "Dashboard",
       "onAutoForward": "openBrowser"
     },
     "8000": {
-      "label": "API FastAPI",
+      "label": "API",
       "onAutoForward": "notify"
-    },
-    "5678": {
-      "label": "n8n Workflows",
-      "onAutoForward": "notify"
-    },
-    "8001": {
-      "label": "Chroma Vector DB",
-      "onAutoForward": "silent"
     },
     "5432": {
       "label": "PostgreSQL",
@@ -47,41 +43,37 @@
       "label": "Redis",
       "onAutoForward": "silent"
     },
-    "11434": {
-      "label": "Ollama",
-      "onAutoForward": "silent"
+    "5678": {
+      "label": "n8n",
+      "onAutoForward": "notify"
     }
   },
-  "postCreateCommand": "bash .devcontainer/post-create.sh",
-  "postStartCommand": "bash .devcontainer/post-start.sh",
+
+  "postCreateCommand": "bash /workspace/.devcontainer/post-create.sh",
+  "postStartCommand": "bash /workspace/.devcontainer/post-start.sh",
+
   "customizations": {
     "vscode": {
       "extensions": [
         "ms-python.python",
         "ms-python.vscode-pylance",
         "ms-python.black-formatter",
-        "ms-toolsai.jupyter",
         "bradlc.vscode-tailwindcss",
         "esbenp.prettier-vscode",
-        "dbaeumer.vscode-eslint",
-        "ms-vscode.vscode-typescript-next",
-        "formulahendry.auto-rename-tag",
-        "christian-kohler.path-intellisense",
-        "eamodio.gitlens",
-        "github.copilot"
+        "dbaeumer.vscode-eslint"
       ],
       "settings": {
         "python.defaultInterpreterPath": "/usr/local/bin/python",
         "python.linting.enabled": true,
-        "python.linting.pylintEnabled": true,
-        "python.formatting.provider": "black",
         "editor.formatOnSave": true,
-        "editor.codeActionsOnSave": {
-          "source.fixAll.eslint": true
-        },
-        "typescript.tsdk": "dashboard/node_modules/typescript/lib"
+        "terminal.integrated.defaultProfile.linux": "zsh"
       }
     }
   },
-  "remoteUser": "root"
+
+  "remoteUser": "vscode",
+  "workspaceFolder": "/workspace",
+  "mounts": [
+    "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached"
+  ]
 }
